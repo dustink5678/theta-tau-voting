@@ -1,63 +1,98 @@
-# Theta Tau Voting
+# Theta Tau Voting Application
 
-A real-time voting application built for Theta Tau fraternity, allowing administrators to create questions and members to vote.
+A real-time voting application for Theta Tau fraternity, built with React, Node.js, and Firebase.
 
 ## Features
 
-- **User Authentication**: Google Authentication for users
-- **Role-Based Access**: Admin and regular user roles
-- **Real-Time Updates**: Live updates using Firebase Firestore
-- **Admin Features**:
-  - Create and manage questions
-  - View voting results in real-time
-  - Verify and manage users
-  - Delete user accounts
-- **User Features**:
-  - Vote on active questions
-  - See waiting status between questions
+- Google Authentication
+- User roles (Admin and Regular users)
+- Real-time voting system
+- Admin panel for user management and question creation
+- User verification system
+- Real-time vote counting and updates
 
-## Technologies Used
+## Prerequisites
 
-- React
-- TypeScript
-- Firebase (Authentication, Firestore)
-- Chakra UI for styling
-- Vite for development and building
+- Node.js (v14 or higher)
+- npm (v6 or higher)
+- Firebase account and project
+- Google Cloud Console account
 
-## Installation
+## Setup
 
 1. Clone the repository:
-   ```
-   git clone https://github.com/yourusername/theta-tau-voting.git
-   cd theta-tau-voting
-   ```
+```bash
+git clone <repository-url>
+cd theta-tau-voting
+```
 
 2. Install dependencies:
-   ```
-   npm install
-   ```
+```bash
+npm install
+```
 
-3. Create a `.env` file with your Firebase configuration:
-   ```
-   VITE_FIREBASE_API_KEY=your-api-key
-   VITE_FIREBASE_AUTH_DOMAIN=your-auth-domain
-   VITE_FIREBASE_PROJECT_ID=your-project-id
-   VITE_FIREBASE_STORAGE_BUCKET=your-storage-bucket
-   VITE_FIREBASE_MESSAGING_SENDER_ID=your-messaging-sender-id
-   VITE_FIREBASE_APP_ID=your-app-id
-   ```
+3. Create a Firebase project:
+   - Go to [Firebase Console](https://console.firebase.google.com/)
+   - Create a new project
+   - Enable Authentication with Google sign-in
+   - Create a Firestore database
+   - Create a Realtime Database
 
-4. Start the development server:
-   ```
-   npm run dev
-   ```
+4. Configure Firebase:
+   - Copy your Firebase configuration from the Firebase Console
+   - Replace the placeholder values in `src/config/firebase.ts`
 
-## Deployment
+5. Start the development server:
+```bash
+npm run dev
+```
 
-The application is automatically deployed to GitHub Pages when pushing to the main branch.
+## Project Structure
 
-Visit the application at: https://yourusername.github.io/theta-tau-voting/
+```
+src/
+├── components/     # Reusable UI components
+├── contexts/      # React contexts (Auth, etc.)
+├── pages/         # Page components
+├── types/         # TypeScript type definitions
+└── config/        # Configuration files
+```
+
+## Firebase Security Rules
+
+Set up the following security rules in your Firestore database:
+
+```javascript
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Users collection
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && 
+        (request.auth.uid == userId || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true);
+    }
+    
+    // Questions collection
+    match /questions/{questionId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+      allow update: if request.auth != null && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    }
+  }
+}
+```
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ## License
 
-MIT
+This project is licensed under the MIT License - see the LICENSE file for details.

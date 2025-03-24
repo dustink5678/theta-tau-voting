@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Button,
@@ -39,7 +39,6 @@ import {
   AlertDialogHeader,
   AlertDialogContent,
   AlertDialogOverlay,
-  Spinner
 } from '@chakra-ui/react';
 import {
   collection,
@@ -58,17 +57,15 @@ import {
 import { db } from '../config/firebase';
 import { User, Question } from '../types/index';
 import { FiTrash2 } from 'react-icons/fi';
-import { useAuth } from '../contexts/AuthContext';
-import { DeleteIcon } from '@chakra-ui/icons';
+import { useRef } from 'react';
 
 const AdminPanel = () => {
-  const { user } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
   const [newQuestion, setNewQuestion] = useState({
-    text: '',
-    options: ['', '', '', '']
+    questionText: '',
+    options: ['', '', '', ''],
   });
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -78,53 +75,42 @@ const AdminPanel = () => {
     onOpen: onDeleteAlertOpen, 
     onClose: onDeleteAlertClose 
   } = useDisclosure();
-  const cancelRef = useRef<HTMLButtonElement>(null);
+  const cancelRef = useRef(null);
   const toast = useToast();
-  const [activeTab, setActiveTab] = useState(0);
-  const [isDeleting, setIsDeleting] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!user || user.role !== 'admin') return;
-
-    // Listen for user changes
+    // Subscribe to users
     const unsubscribeUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
-      const usersData = snapshot.docs.map(doc => ({
+      const userData: User[] = snapshot.docs.map((doc) => ({
+        ...(doc.data() as User),
         uid: doc.id,
-        ...doc.data()
-      } as User));
-      
-      setUsers(usersData);
-      
-      // Filter verified and pending users
-      const verifiedUsersData = usersData.filter(u => u.verified);
-      const pendingUsersData = usersData.filter(u => !u.verified);
-      
-      setUsers(usersData);
-    }, (error) => {
-      console.error('Error fetching users:', error);
+      }));
+      setUsers(userData);
+    }, error => {
+      console.error("Error listening to users collection:", error);
       toast({
-        title: 'Error fetching users',
-        description: error.message,
+        title: 'Error loading users',
+        description: 'Please refresh the page and try again.',
         status: 'error',
         duration: 5000,
         isClosable: true,
       });
     });
 
-    // Listen for questions
+    // Subscribe to questions
     const unsubscribeQuestions = onSnapshot(collection(db, 'questions'), (snapshot) => {
-      const questionsData = snapshot.docs.map(doc => ({
+      const questionData = snapshot.docs.map((doc) => ({
+        ...(doc.data() as Question),
         questionId: doc.id,
-        ...doc.data()
-      } as Question));
-
-      const activeQuestion = questionsData.find(q => q.active);
-      setCurrentQuestion(activeQuestion || null);
-    }, (error) => {
-      console.error('Error fetching questions:', error);
+      }));
+      setQuestions(questionData);
+      const active = questionData.find((q) => q.active);
+      setCurrentQuestion(active || null);
+    }, error => {
+      console.error("Error listening to questions collection:", error);
       toast({
-        title: 'Error fetching questions',
-        description: error.message,
+        title: 'Error loading questions',
+        description: 'Please refresh the page and try again.',
         status: 'error',
         duration: 5000,
         isClosable: true,
@@ -135,45 +121,36 @@ const AdminPanel = () => {
       unsubscribeUsers();
       unsubscribeQuestions();
     };
-  }, [user, toast]);
+  }, [toast]);
 
-  const handleTabsChange = (index: number) => {
-    setActiveTab(index);
-  };
-
-  const handleVerifyUser = async (uid: string, verify: boolean) => {
+  const handleVerifyUser = async (userId: string, verified: boolean) => {
     try {
-      // If trying to unverify an admin, prevent it and show a message
-      if (!verify) {
-        const targetUser = users.find(u => u.uid === uid);
-        if (targetUser && targetUser.role === 'admin') {
-          toast({
-            title: 'Cannot Unverify Admin',
-            description: 'Admin users cannot be unverified. They can only be deleted.',
-            status: 'warning',
-            duration: 5000,
-            isClosable: true,
-          });
-          return;
-        }
+      // First check if user document still exists
+      const userRef = doc(db, 'users', userId);
+      const userDoc = await getDoc(userRef);
+      
+      if (!userDoc.exists()) {
+        toast({
+          title: 'User not found',
+          description: 'The user may have been deleted.',
+          status: 'error',
+          duration: 3000,
+        });
+        return;
       }
       
-      await updateDoc(doc(db, 'users', uid), { verified: verify });
+      await updateDoc(userRef, { verified });
       toast({
-        title: verify ? 'User Verified' : 'User Unverified',
-        description: verify ? 'User can now participate in voting' : 'User can no longer participate in voting',
+        title: `User ${verified ? 'verified' : 'unverified'} successfully`,
         status: 'success',
         duration: 3000,
-        isClosable: true,
       });
-    } catch (error: any) {
-      console.error(`Error ${verify ? 'verifying' : 'unverifying'} user:`, error);
+    } catch (error) {
+      console.error('Error updating user:', error);
       toast({
-        title: 'Error',
-        description: error.message || `Failed to ${verify ? 'verify' : 'unverify'} user`,
+        title: 'Error updating user',
         status: 'error',
-        duration: 5000,
-        isClosable: true,
+        duration: 3000,
       });
     }
   };
@@ -211,7 +188,7 @@ const AdminPanel = () => {
     }
   };
 
-  const handleOptionChange = (index: number, value: string) => {
+  const handleUpdateOption = (index: number, value: string) => {
     const newOptions = [...newQuestion.options];
     newOptions[index] = value;
     setNewQuestion({ ...newQuestion, options: newOptions });
@@ -220,7 +197,7 @@ const AdminPanel = () => {
   const handleAddOption = () => {
     setNewQuestion({
       ...newQuestion,
-      options: [...newQuestion.options, '']
+      options: [...newQuestion.options, ''],
     });
   };
 
@@ -232,86 +209,52 @@ const AdminPanel = () => {
 
   const handleCreateQuestion = async () => {
     try {
-      // Validate inputs
-      if (!newQuestion.text.trim()) {
-        toast({
-          title: 'Error',
-          description: 'Question text is required',
-          status: 'error',
-          duration: 3000,
-          isClosable: true,
-        });
-        return;
-      }
+      const batch = writeBatch(db);
 
-      const validOptions = newQuestion.options.filter(o => o.trim());
-      if (validOptions.length < 2) {
-        toast({
-          title: 'Error',
-          description: 'At least two options are required',
-          status: 'error',
-          duration: 3000,
-          isClosable: true,
-        });
-        return;
-      }
-
-      // Deactivate current question if exists
+      // Deactivate current question if it exists
       if (currentQuestion) {
-        await updateDoc(doc(db, 'questions', currentQuestion.questionId), { active: false });
+        batch.update(doc(db, 'questions', currentQuestion.questionId), { active: false });
       }
 
       // Create new question
-      const batch = writeBatch(db);
-
-      // Add the new question
-      const newQuestionRef = doc(collection(db, 'questions'));
-      batch.set(newQuestionRef, {
-        questionText: newQuestion.text,
-        options: newQuestion.options.filter(o => o.trim()),
-        answers: {},
+      const questionRef = await addDoc(collection(db, 'questions'), {
+        questionText: newQuestion.questionText,
+        options: newQuestion.options.filter((opt) => opt.trim() !== ''),
         active: true,
         createdAt: Timestamp.now(),
+        answers: {},
       });
 
       // Reset all users' answered status
-      const usersQuery = query(collection(db, 'users'));
-      const usersSnapshot = await getDocs(usersQuery);
-      
-      usersSnapshot.forEach(userDoc => {
-        batch.update(doc(db, 'users', userDoc.id), {
-          answered: false
-        });
+      const usersSnapshot = await getDocs(collection(db, 'users'));
+      usersSnapshot.docs.forEach((userDoc) => {
+        batch.update(doc(db, 'users', userDoc.id), { answered: false });
       });
 
       await batch.commit();
 
       // Update local state to reflect changes immediately
-      setUsers(users.map(u => ({ ...u, answered: false })));
+      setUsers(users.map(user => ({
+        ...user,
+        answered: false
+      })));
 
-      // Reset new question form and close modal
       setNewQuestion({
-        text: '',
-        options: ['', '', '', '']
+        questionText: '',
+        options: ['', '', '', ''],
       });
-      
       onClose();
-      
       toast({
-        title: 'Success',
-        description: 'Question created successfully',
+        title: 'Question created successfully',
         status: 'success',
         duration: 3000,
-        isClosable: true,
       });
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error creating question:', error);
       toast({
-        title: 'Error',
-        description: error.message || 'Failed to create question',
+        title: 'Error creating question',
         status: 'error',
-        duration: 5000,
-        isClosable: true,
+        duration: 3000,
       });
     }
   };
@@ -359,15 +302,6 @@ const AdminPanel = () => {
 
   // Filter for users who haven't voted
   const pendingVoters = users.filter(user => user.verified && !user.answered);
-
-  if (!user || user.role !== 'admin') {
-    return (
-      <Box p={5} maxW="100%" textAlign="center">
-        <Heading>Unauthorized</Heading>
-        <Text mt={4}>You do not have permission to access this page.</Text>
-      </Box>
-    );
-  }
 
   return (
     <Box width="100vw" minH="100%" bg="gray.50" p={4}>
@@ -422,7 +356,7 @@ const AdminPanel = () => {
             </Box>
           )}
 
-          <Tabs isLazy w="100%" index={activeTab} onChange={handleTabsChange}>
+          <Tabs isLazy w="100%">
             <TabList>
               <Tab>Users Management</Tab>
               <Tab>Questions History</Tab>
@@ -460,24 +394,22 @@ const AdminPanel = () => {
                             </Td>
                             <Td>
                               <Flex gap={2}>
-                                {user.role !== 'admin' && (
-                                  user.verified ? (
-                                    <Button
-                                      size="sm"
-                                      colorScheme="red"
-                                      onClick={() => handleVerifyUser(user.uid, false)}
-                                    >
-                                      Unverify
-                                    </Button>
-                                  ) : (
-                                    <Button
-                                      size="sm"
-                                      colorScheme="green"
-                                      onClick={() => handleVerifyUser(user.uid, true)}
-                                    >
-                                      Verify
-                                    </Button>
-                                  )
+                                {user.verified ? (
+                                  <Button
+                                    size="sm"
+                                    colorScheme="red"
+                                    onClick={() => handleVerifyUser(user.uid, false)}
+                                  >
+                                    Unverify
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    size="sm"
+                                    colorScheme="green"
+                                    onClick={() => handleVerifyUser(user.uid, true)}
+                                  >
+                                    Verify
+                                  </Button>
                                 )}
                                 <Tooltip label="Delete user" hasArrow>
                                   <IconButton
@@ -554,8 +486,8 @@ const AdminPanel = () => {
               <FormControl>
                 <FormLabel>Question Text</FormLabel>
                 <Input
-                  value={newQuestion.text}
-                  onChange={(e) => setNewQuestion({ ...newQuestion, text: e.target.value })}
+                  value={newQuestion.questionText}
+                  onChange={(e) => setNewQuestion({ ...newQuestion, questionText: e.target.value })}
                   placeholder="Enter your question"
                 />
               </FormControl>
@@ -565,7 +497,7 @@ const AdminPanel = () => {
                 <Flex key={index} gap={2}>
                   <Input
                     value={option}
-                    onChange={(e) => handleOptionChange(index, e.target.value)}
+                    onChange={(e) => handleUpdateOption(index, e.target.value)}
                     placeholder={`Option ${index + 1}`}
                   />
                   {newQuestion.options.length > 2 && (
@@ -593,7 +525,7 @@ const AdminPanel = () => {
               colorScheme="red"
               onClick={handleCreateQuestion}
               isDisabled={
-                newQuestion.text.trim() === '' ||
+                newQuestion.questionText.trim() === '' ||
                 newQuestion.options.filter((opt) => opt.trim() !== '').length < 2
               }
             >

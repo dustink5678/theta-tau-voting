@@ -61,33 +61,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           const userSnapshot = await getDoc(userDocRef);
           
           if (userSnapshot.exists()) {
-            // User exists in Firestore, set up real-time listener with high responsiveness
+            // User exists in Firestore, set up real-time listener
             userDocUnsubscribe = onSnapshot(
               userDocRef, 
-              { includeMetadataChanges: true }, // This makes the listener more responsive
               (doc) => {
                 if (doc.exists()) {
                   const userData = doc.data() as User;
                   
-                  // If user is unverified, immediately redirect to login
-                  if (userData.verified === false) {
-                    console.log("User unverified, redirecting to login");
-                    setUser({
-                      ...userData,
-                      uid: firebaseUser.uid,
-                    });
-                    navigate('/login');
-                    return;
-                  }
-                  
-                  // Set user data for verified users
+                  // Set user data
                   setUser({
                     ...userData,
                     uid: firebaseUser.uid,
                   });
+                  
+                  // If user is unverified, redirect to login
+                  if (userData.verified === false) {
+                    navigate('/login');
+                  }
                 } else {
                   // Document deleted or doesn't exist anymore
-                  console.log("User document doesn't exist anymore");
                   setUser(null);
                   navigate('/login');
                   handleSignOut();
@@ -98,7 +90,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 
                 // If permission error, the user likely doesn't have access or was deleted
                 if (error.code === 'permission-denied') {
-                  console.log("Permission denied for user document, signing out");
                   setUser(null);
                   navigate('/login');
                   handleSignOut();
@@ -107,7 +98,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             );
           } else {
             // New user, create a record in Firestore
-            console.log("Creating new user in Firestore");
             const newUser = {
               email: firebaseUser.email || '',
               displayName: firebaseUser.displayName || '',
@@ -127,21 +117,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             
             // Set up listener for the newly created user with error handling
             userDocUnsubscribe = onSnapshot(
-              doc(db, 'users', firebaseUser.uid),
-              { includeMetadataChanges: true },
+              doc(db, 'users', firebaseUser.uid), 
               (doc) => {
                 if (doc.exists()) {
                   const userData = doc.data() as User;
-                  
-                  // If user is unverified, stay on login page
-                  if (userData.verified === false) {
-                    setUser({
-                      ...userData,
-                      uid: firebaseUser.uid,
-                    });
-                    return;
-                  }
-                  
                   setUser({
                     ...userData,
                     uid: firebaseUser.uid,
