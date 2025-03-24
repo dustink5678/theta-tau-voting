@@ -30,7 +30,6 @@ import {
   TabPanel,
   Badge,
   Flex,
-  Divider,
   IconButton,
   Tooltip,
   AlertDialog,
@@ -42,14 +41,12 @@ import {
 } from '@chakra-ui/react';
 import {
   collection,
-  query,
   getDocs,
   updateDoc,
   doc,
   addDoc,
   Timestamp,
   onSnapshot,
-  where,
   writeBatch,
   deleteDoc,
   getDoc,
@@ -216,7 +213,7 @@ const AdminPanel = () => {
         batch.update(doc(db, 'questions', currentQuestion.questionId), { active: false });
       }
 
-      const questionRef = await addDoc(collection(db, 'questions'), {
+      await addDoc(collection(db, 'questions'), {
         questionText: newQuestion.questionText,
         options: newQuestion.options.filter((opt) => opt.trim() !== ''),
         active: true,

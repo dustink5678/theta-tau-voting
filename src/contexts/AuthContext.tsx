@@ -1,12 +1,11 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
+import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
 import { 
   GoogleAuthProvider, 
   signInWithPopup, 
   signOut as firebaseSignOut,
-  onAuthStateChanged,
-  User as FirebaseUser
+  onAuthStateChanged
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, onSnapshot, FirestoreError } from 'firebase/firestore';
+import { doc, getDoc, setDoc, onSnapshot, FirestoreError } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
 import { User } from '../types/index';
 import { useNavigate } from 'react-router-dom';
