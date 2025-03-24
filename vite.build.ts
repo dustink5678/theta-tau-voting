@@ -1,5 +1,4 @@
-// GitHub Pages build script
-process.env.NODE_ENV = 'production';
-process.env.BASE_URL = '/theta-tau-voting/';
+// This script is kept for reference but is no longer used
+// We now use cross-env in the package.json scripts
 
-console.log('Building for GitHub Pages...'); 
+console.log('This script is deprecated. Using cross-env in package.json instead.'); 
