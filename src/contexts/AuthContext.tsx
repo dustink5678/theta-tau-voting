@@ -48,7 +48,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     let userDocUnsubscribe: (() => void) | null = null;
     
     const authUnsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      // Clear previous listener if exists
       if (userDocUnsubscribe) {
         userDocUnsubscribe();
         userDocUnsubscribe = null;
@@ -56,39 +55,32 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       if (firebaseUser) {
         try {
-          // First check if the user document exists
           const userDocRef = doc(db, 'users', firebaseUser.uid);
           const userSnapshot = await getDoc(userDocRef);
           
           if (userSnapshot.exists()) {
-            // User exists in Firestore, set up real-time listener
             userDocUnsubscribe = onSnapshot(
               userDocRef, 
               (doc) => {
                 if (doc.exists()) {
                   const userData = doc.data() as User;
                   
-                  // Check if user was previously verified but is now unverified
                   const wasVerifiedButNowUnverified = user?.verified === true && userData.verified === false;
                   
-                  // Set user data
                   setUser({
                     ...userData,
                     uid: firebaseUser.uid,
                   });
                   
-                  // If user is unverified, redirect to login immediately
                   if (userData.verified === false) {
                     console.log("User unverified, redirecting to login");
                     navigate('/login');
                     
-                    // If this was a change from verified to unverified, sign out completely
                     if (wasVerifiedButNowUnverified) {
                       handleSignOut();
                     }
                   }
                 } else {
-                  // Document deleted or doesn't exist anymore
                   setUser(null);
                   navigate('/login');
                   handleSignOut();
@@ -97,7 +89,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               (error: FirestoreError) => {
                 console.error("Error listening to user document:", error);
                 
-                // If permission error, the user likely doesn't have access or was deleted
                 if (error.code === 'permission-denied') {
                   setUser(null);
                   navigate('/login');
@@ -106,7 +97,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               }
             );
           } else {
-            // New user, create a record in Firestore
             const newUser = {
               email: firebaseUser.email || '',
               displayName: firebaseUser.displayName || '',
@@ -118,13 +108,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             
             await setDoc(doc(db, 'users', firebaseUser.uid), newUser);
             
-            // Set initial user state without waiting for listener
             setUser({
               ...newUser,
               uid: firebaseUser.uid,
             });
             
-            // Set up listener for the newly created user with error handling
             userDocUnsubscribe = onSnapshot(
               doc(db, 'users', firebaseUser.uid), 
               (doc) => {
@@ -143,7 +131,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               (error: FirestoreError) => {
                 console.error("Error listening to user document:", error);
                 
-                // If permission error, the user was likely deleted
                 if (error.code === 'permission-denied') {
                   setUser(null);
                   navigate('/login');
@@ -157,14 +144,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           setUser(null);
         }
       } else {
-        // User signed out
         setUser(null);
       }
       
       setLoading(false);
     });
 
-    // Cleanup function for when component unmounts
     return () => {
       authUnsubscribe();
       if (userDocUnsubscribe) {
@@ -177,7 +162,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
-      // Navigation will happen via the useEffect watching the auth state
     } catch (error) {
       console.error('Error signing in with Google:', error);
       throw error;

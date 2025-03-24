@@ -77,9 +77,13 @@ const AdminPanel = () => {
   } = useDisclosure();
   const cancelRef = useRef(null);
   const toast = useToast();
+  const [isDeleteAllQuestionsAlertOpen, setIsDeleteAllQuestionsAlertOpen] = useState(false);
+  const deleteAllQuestionsRef = useRef(null);
+  const [questionToDelete, setQuestionToDelete] = useState<string | null>(null);
+  const [isDeleteQuestionAlertOpen, setIsDeleteQuestionAlertOpen] = useState(false);
+  const deleteQuestionRef = useRef(null);
 
   useEffect(() => {
-    // Subscribe to users
     const unsubscribeUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
       const userData: User[] = snapshot.docs.map((doc) => ({
         ...(doc.data() as User),
@@ -97,7 +101,6 @@ const AdminPanel = () => {
       });
     });
 
-    // Subscribe to questions
     const unsubscribeQuestions = onSnapshot(collection(db, 'questions'), (snapshot) => {
       const questionData = snapshot.docs.map((doc) => ({
         ...(doc.data() as Question),
@@ -125,7 +128,6 @@ const AdminPanel = () => {
 
   const handleVerifyUser = async (userId: string, verified: boolean) => {
     try {
-      // First check if user document still exists
       const userRef = doc(db, 'users', userId);
       const userDoc = await getDoc(userRef);
       
@@ -165,7 +167,6 @@ const AdminPanel = () => {
     
     setDeleteLoading(true);
     try {
-      // Delete the user document from Firestore
       await deleteDoc(doc(db, 'users', userToDelete.uid));
       
       toast({
@@ -211,12 +212,10 @@ const AdminPanel = () => {
     try {
       const batch = writeBatch(db);
 
-      // Deactivate current question if it exists
       if (currentQuestion) {
         batch.update(doc(db, 'questions', currentQuestion.questionId), { active: false });
       }
 
-      // Create new question
       const questionRef = await addDoc(collection(db, 'questions'), {
         questionText: newQuestion.questionText,
         options: newQuestion.options.filter((opt) => opt.trim() !== ''),
@@ -225,7 +224,6 @@ const AdminPanel = () => {
         answers: {},
       });
 
-      // Reset all users' answered status
       const usersSnapshot = await getDocs(collection(db, 'users'));
       usersSnapshot.docs.forEach((userDoc) => {
         batch.update(doc(db, 'users', userDoc.id), { answered: false });
@@ -233,7 +231,6 @@ const AdminPanel = () => {
 
       await batch.commit();
 
-      // Update local state to reflect changes immediately
       setUsers(users.map(user => ({
         ...user,
         answered: false
@@ -263,15 +260,12 @@ const AdminPanel = () => {
     try {
       const batch = writeBatch(db);
 
-      // Deactivate all questions
       for (const question of questions) {
         batch.update(doc(db, 'questions', question.questionId), { active: false });
       }
 
-      // Activate selected question
       batch.update(doc(db, 'questions', questionId), { active: true });
 
-      // Reset all users' answered status
       const usersSnapshot = await getDocs(collection(db, 'users'));
       usersSnapshot.docs.forEach((userDoc) => {
         batch.update(doc(db, 'users', userDoc.id), { answered: false });
@@ -279,7 +273,6 @@ const AdminPanel = () => {
 
       await batch.commit();
 
-      // Update local state to reflect changes immediately
       setUsers(users.map(user => ({
         ...user,
         answered: false
@@ -300,7 +293,99 @@ const AdminPanel = () => {
     }
   };
 
-  // Filter for users who haven't voted
+  const openDeleteQuestionDialog = (questionId: string) => {
+    setQuestionToDelete(questionId);
+    setIsDeleteQuestionAlertOpen(true);
+  };
+
+  const closeDeleteQuestionDialog = () => {
+    setIsDeleteQuestionAlertOpen(false);
+    setQuestionToDelete(null);
+  };
+
+  const confirmDeleteQuestion = async () => {
+    if (!questionToDelete) return;
+    
+    try {
+      const questionObj = questions.find(q => q.questionId === questionToDelete);
+      if (questionObj?.active) {
+        toast({
+          title: 'Cannot delete active question',
+          description: 'Please deactivate this question first by activating another question.',
+          status: 'error',
+          duration: 3000,
+        });
+        closeDeleteQuestionDialog();
+        return;
+      }
+
+      await deleteDoc(doc(db, 'questions', questionToDelete));
+      
+      toast({
+        title: 'Question deleted successfully',
+        status: 'success',
+        duration: 3000,
+      });
+      closeDeleteQuestionDialog();
+    } catch (error) {
+      console.error('Error deleting question:', error);
+      toast({
+        title: 'Error deleting question',
+        status: 'error',
+        duration: 3000,
+      });
+      closeDeleteQuestionDialog();
+    }
+  };
+
+  const openDeleteAllQuestionsDialog = () => {
+    setIsDeleteAllQuestionsAlertOpen(true);
+  };
+
+  const closeDeleteAllQuestionsDialog = () => {
+    setIsDeleteAllQuestionsAlertOpen(false);
+  };
+
+  const confirmDeleteAllQuestions = async () => {
+    try {
+      const batch = writeBatch(db);
+      
+      const inactiveQuestions = questions.filter(q => !q.active);
+      
+      if (inactiveQuestions.length === 0) {
+        toast({
+          title: 'No inactive questions to delete',
+          status: 'info',
+          duration: 3000,
+        });
+        closeDeleteAllQuestionsDialog();
+        return;
+      }
+
+      inactiveQuestions.forEach(question => {
+        batch.delete(doc(db, 'questions', question.questionId));
+      });
+
+      await batch.commit();
+      
+      toast({
+        title: 'All inactive questions deleted successfully',
+        description: `Deleted ${inactiveQuestions.length} questions.`,
+        status: 'success',
+        duration: 3000,
+      });
+      closeDeleteAllQuestionsDialog();
+    } catch (error) {
+      console.error('Error deleting all questions:', error);
+      toast({
+        title: 'Error deleting questions',
+        status: 'error',
+        duration: 3000,
+      });
+      closeDeleteAllQuestionsDialog();
+    }
+  };
+
   const pendingVoters = users.filter(user => user.verified && !user.answered);
 
   return (
@@ -421,7 +506,17 @@ const AdminPanel = () => {
 
               <TabPanel p={0} pt={4}>
                 <Box bg="white" p={6} borderRadius="md" boxShadow="md" w="100%">
-                  <Heading size="md" mb={4}>Question History</Heading>
+                  <Flex justifyContent="space-between" alignItems="center" mb={4}>
+                    <Heading size="md">Question History</Heading>
+                    <Button 
+                      colorScheme="red" 
+                      size="sm"
+                      onClick={openDeleteAllQuestionsDialog}
+                      leftIcon={<FiTrash2 />}
+                    >
+                      Delete All Inactive Questions
+                    </Button>
+                  </Flex>
                   <Box maxH="500px" overflowY="auto" w="100%">
                     <Table variant="simple">
                       <Thead>
@@ -441,15 +536,27 @@ const AdminPanel = () => {
                               </Badge>
                             </Td>
                             <Td>
-                              {!question.active && (
-                                <Button
-                                  size="sm"
-                                  colorScheme="red"
-                                  onClick={() => handleActivateQuestion(question.questionId)}
-                                >
-                                  Activate
-                                </Button>
-                              )}
+                              <Flex gap={2}>
+                                {!question.active && (
+                                  <>
+                                    <Button
+                                      size="sm"
+                                      colorScheme="red"
+                                      onClick={() => handleActivateQuestion(question.questionId)}
+                                    >
+                                      Redo
+                                    </Button>
+                                    <IconButton
+                                      icon={<FiTrash2 />}
+                                      aria-label="Delete question"
+                                      colorScheme="red"
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => openDeleteQuestionDialog(question.questionId)}
+                                    />
+                                  </>
+                                )}
+                              </Flex>
                             </Td>
                           </Tr>
                         ))}
@@ -495,7 +602,6 @@ const AdminPanel = () => {
         </Flex>
       </Box>
 
-      {/* Create Question Modal */}
       <Modal isOpen={isOpen} onClose={onClose} size="lg">
         <ModalOverlay />
         <ModalContent>
@@ -555,7 +661,6 @@ const AdminPanel = () => {
         </ModalContent>
       </Modal>
 
-      {/* Delete User Confirmation Dialog */}
       <AlertDialog
         isOpen={isDeleteAlertOpen}
         leastDestructiveRef={cancelRef}
@@ -582,6 +687,60 @@ const AdminPanel = () => {
                 ml={3}
                 isLoading={deleteLoading}
               >
+                Delete
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialogOverlay>
+      </AlertDialog>
+
+      <AlertDialog
+        isOpen={isDeleteAllQuestionsAlertOpen}
+        leastDestructiveRef={deleteAllQuestionsRef}
+        onClose={closeDeleteAllQuestionsDialog}
+      >
+        <AlertDialogOverlay>
+          <AlertDialogContent>
+            <AlertDialogHeader fontSize="lg" fontWeight="bold">
+              Delete All Inactive Questions
+            </AlertDialogHeader>
+
+            <AlertDialogBody>
+              Are you sure you want to delete all inactive questions? This action cannot be undone.
+            </AlertDialogBody>
+
+            <AlertDialogFooter>
+              <Button ref={deleteAllQuestionsRef} onClick={closeDeleteAllQuestionsDialog}>
+                Cancel
+              </Button>
+              <Button colorScheme="red" onClick={confirmDeleteAllQuestions} ml={3}>
+                Delete All
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialogOverlay>
+      </AlertDialog>
+
+      <AlertDialog
+        isOpen={isDeleteQuestionAlertOpen}
+        leastDestructiveRef={deleteQuestionRef}
+        onClose={closeDeleteQuestionDialog}
+      >
+        <AlertDialogOverlay>
+          <AlertDialogContent>
+            <AlertDialogHeader fontSize="lg" fontWeight="bold">
+              Delete Question
+            </AlertDialogHeader>
+
+            <AlertDialogBody>
+              Are you sure you want to delete this question? This action cannot be undone.
+            </AlertDialogBody>
+
+            <AlertDialogFooter>
+              <Button ref={deleteQuestionRef} onClick={closeDeleteQuestionDialog}>
+                Cancel
+              </Button>
+              <Button colorScheme="red" onClick={confirmDeleteQuestion} ml={3}>
                 Delete
               </Button>
             </AlertDialogFooter>
