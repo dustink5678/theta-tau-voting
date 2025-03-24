@@ -7,11 +7,14 @@ export default defineConfig({
   plugins: [react()],
   // Base path for GitHub Pages deployment - only in production
   base: process.env.NODE_ENV === 'production' ? '/theta-tau-voting/' : '/',
+  // Explicitly set the entry point
+  root: '.',
+  publicDir: 'public',
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
     sourcemap: false,
-    // Ensure correct paths for GitHub Pages
+    // Make sure to include the entry point manually
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'index.html'),
@@ -20,7 +23,6 @@ export default defineConfig({
         entryFileNames: 'assets/[name].[hash].js',
         chunkFileNames: 'assets/[name].[hash].js',
         assetFileNames: 'assets/[name].[hash].[ext]',
-        manualChunks: undefined
       }
     }
   },

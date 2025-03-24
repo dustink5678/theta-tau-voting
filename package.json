@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "build:github": "cross-env NODE_ENV=production tsc && vite build --base=/theta-tau-voting/",
+    "build:github": "tsc && vite build --base=/theta-tau-voting/",
     "predeploy": "npm run build:github",
     "deploy": "gh-pages -d dist",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
