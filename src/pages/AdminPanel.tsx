@@ -331,35 +331,11 @@ const AdminPanel = () => {
             )}
           </Box>
           
-          {pendingVoters.length > 0 && (
-            <Box bg="white" p={6} borderRadius="md" boxShadow="md" mb={6} w="100%">
-              <Heading size="md" mb={4}>Pending Voters ({pendingVoters.length})</Heading>
-              <Text mb={3}>The following users have not voted on the current question:</Text>
-              <Box maxH="300px" overflowY="auto" w="100%">
-                <Table variant="simple" size="sm">
-                  <Thead>
-                    <Tr>
-                      <Th>Name</Th>
-                      <Th>Email</Th>
-                    </Tr>
-                  </Thead>
-                  <Tbody>
-                    {pendingVoters.map((user) => (
-                      <Tr key={user.uid}>
-                        <Td>{user.displayName || user.name || "User"}</Td>
-                        <Td>{user.email}</Td>
-                      </Tr>
-                    ))}
-                  </Tbody>
-                </Table>
-              </Box>
-            </Box>
-          )}
-
           <Tabs isLazy w="100%">
             <TabList>
               <Tab>Users Management</Tab>
               <Tab>Questions History</Tab>
+              <Tab>Pending Voters</Tab>
             </TabList>
 
             <TabPanels w="100%">
@@ -395,13 +371,25 @@ const AdminPanel = () => {
                             <Td>
                               <Flex gap={2}>
                                 {user.verified ? (
-                                  <Button
-                                    size="sm"
-                                    colorScheme="red"
-                                    onClick={() => handleVerifyUser(user.uid, false)}
-                                  >
-                                    Unverify
-                                  </Button>
+                                  user.role === 'admin' ? (
+                                    <Tooltip label="Admin users cannot be unverified" hasArrow>
+                                      <Button
+                                        size="sm"
+                                        colorScheme="gray"
+                                        isDisabled={true}
+                                      >
+                                        Admin
+                                      </Button>
+                                    </Tooltip>
+                                  ) : (
+                                    <Button
+                                      size="sm"
+                                      colorScheme="red"
+                                      onClick={() => handleVerifyUser(user.uid, false)}
+                                    >
+                                      Unverify
+                                    </Button>
+                                  )
                                 ) : (
                                   <Button
                                     size="sm"
@@ -469,6 +457,38 @@ const AdminPanel = () => {
                     </Table>
                   </Box>
                 </Box>
+              </TabPanel>
+              
+              <TabPanel p={0} pt={4}>
+                {pendingVoters.length > 0 ? (
+                  <Box bg="white" p={6} borderRadius="md" boxShadow="md" w="100%">
+                    <Heading size="md" mb={4}>Pending Voters ({pendingVoters.length})</Heading>
+                    <Text mb={3}>The following users have not voted on the current question:</Text>
+                    <Box maxH="500px" overflowY="auto" w="100%">
+                      <Table variant="simple" size="sm">
+                        <Thead>
+                          <Tr>
+                            <Th>Name</Th>
+                            <Th>Email</Th>
+                          </Tr>
+                        </Thead>
+                        <Tbody>
+                          {pendingVoters.map((user) => (
+                            <Tr key={user.uid}>
+                              <Td>{user.displayName || user.name || "User"}</Td>
+                              <Td>{user.email}</Td>
+                            </Tr>
+                          ))}
+                        </Tbody>
+                      </Table>
+                    </Box>
+                  </Box>
+                ) : (
+                  <Box bg="white" p={6} borderRadius="md" boxShadow="md" w="100%">
+                    <Heading size="md" mb={4}>Pending Voters</Heading>
+                    <Text>All verified users have voted on the current question.</Text>
+                  </Box>
+                )}
               </TabPanel>
             </TabPanels>
           </Tabs>

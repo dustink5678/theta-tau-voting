@@ -68,15 +68,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 if (doc.exists()) {
                   const userData = doc.data() as User;
                   
+                  // Check if user was previously verified but is now unverified
+                  const wasVerifiedButNowUnverified = user?.verified === true && userData.verified === false;
+                  
                   // Set user data
                   setUser({
                     ...userData,
                     uid: firebaseUser.uid,
                   });
                   
-                  // If user is unverified, redirect to login
+                  // If user is unverified, redirect to login immediately
                   if (userData.verified === false) {
+                    console.log("User unverified, redirecting to login");
                     navigate('/login');
+                    
+                    // If this was a change from verified to unverified, sign out completely
+                    if (wasVerifiedButNowUnverified) {
+                      handleSignOut();
+                    }
                   }
                 } else {
                   // Document deleted or doesn't exist anymore
