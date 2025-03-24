@@ -10,11 +10,13 @@ export default defineConfig({
     outDir: 'dist',
     assetsDir: 'assets',
     sourcemap: false,
-    // Add this to get a clean URL format
-    rollupOptions: {
-      output: {
-        manualChunks: undefined,
-      },
-    },
+  },
+  server: {
+    port: 5173,
+    strictPort: true,
+  },
+  // Ensure TypeScript files are processed correctly
+  optimizeDeps: {
+    include: ['react', 'react-dom', 'react-router-dom'],
   },
 })
