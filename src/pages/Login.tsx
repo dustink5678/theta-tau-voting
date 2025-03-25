@@ -13,10 +13,10 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import logo from '../../logo.png';
 import { GoogleAuthProvider, signInWithRedirect } from 'firebase/auth';
-import { auth } from '../../src/config/firebase';
+import { auth } from '../config/firebase';
 
 const Login = () => {
-  const { signInWithGoogle, user } = useAuth();
+  const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const toast = useToast();
   const navigate = useNavigate();
