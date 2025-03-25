@@ -74,6 +74,8 @@ const AdminPanel = () => {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteQuestionLoading, setDeleteQuestionLoading] = useState(false);
   const [deleteAllQuestionsLoading, setDeleteAllQuestionsLoading] = useState(false);
+  const [deleteAllUsersLoading, setDeleteAllUsersLoading] = useState(false);
+  const [isDeleteAllUsersAlertOpen, setIsDeleteAllUsersAlertOpen] = useState(false);
   const { isOpen, onOpen, onClose } = useDisclosure();
   const { 
     isOpen: isDeleteUserAlertOpen, 
@@ -354,12 +356,11 @@ const AdminPanel = () => {
     setDeleteAllQuestionsLoading(true);
     try {
       const batch = writeBatch(db);
-      const questionsSnapshot = await getDocs(collection(db, 'questions'));
       
-      // Delete all questions without checking if they're active
-      questionsSnapshot.docs.forEach((questionDoc) => {
-        batch.delete(doc(db, 'questions', questionDoc.id));
-      });
+      for (const question of questions) {
+        const questionRef = doc(db, 'questions', question.questionId);
+        batch.delete(questionRef);
+      }
       
       await batch.commit();
       
@@ -371,14 +372,50 @@ const AdminPanel = () => {
     } catch (error) {
       console.error('Error deleting all questions:', error);
       toast({
-        title: 'Error deleting questions',
-        description: 'Failed to delete questions. Please try again.',
+        title: 'Error deleting all questions',
         status: 'error',
         duration: 3000,
       });
     } finally {
       setDeleteAllQuestionsLoading(false);
       setIsDeleteAllQuestionsAlertOpen(false);
+    }
+  };
+
+  const handleDeleteAllUsers = () => {
+    setIsDeleteAllUsersAlertOpen(true);
+  };
+
+  const confirmDeleteAllUsers = async () => {
+    setDeleteAllUsersLoading(true);
+    try {
+      const batch = writeBatch(db);
+      
+      // Filter out admin users
+      const nonAdminUsers = users.filter(user => user.role !== 'admin');
+      
+      for (const user of nonAdminUsers) {
+        const userRef = doc(db, 'users', user.uid);
+        batch.delete(userRef);
+      }
+      
+      await batch.commit();
+      
+      toast({
+        title: 'All non-admin users deleted successfully',
+        status: 'success',
+        duration: 3000,
+      });
+    } catch (error) {
+      console.error('Error deleting all non-admin users:', error);
+      toast({
+        title: 'Error deleting all non-admin users',
+        status: 'error',
+        duration: 3000,
+      });
+    } finally {
+      setDeleteAllUsersLoading(false);
+      setIsDeleteAllUsersAlertOpen(false);
     }
   };
 
@@ -420,7 +457,17 @@ const AdminPanel = () => {
             <TabPanels w="100%">
               <TabPanel p={0} pt={4}>
                 <Box bg="white" p={6} borderRadius="md" boxShadow="md" w="100%">
-                  <Heading size="md" mb={4}>Manage Users</Heading>
+                  <Flex justifyContent="space-between" alignItems="center" mb={4}>
+                    <Heading size="md">User Management</Heading>
+                    <Button 
+                      colorScheme="red" 
+                      size="sm"
+                      onClick={handleDeleteAllUsers}
+                      isLoading={deleteAllUsersLoading}
+                    >
+                      Delete All Users Except Admin
+                    </Button>
+                  </Flex>
                   <Box maxH="500px" overflowY="auto" w="100%">
                     <Table variant="simple">
                       <Thead>
@@ -523,7 +570,18 @@ const AdminPanel = () => {
                       <Tbody>
                         {questions.map((question) => (
                           <Tr key={question.questionId}>
-                            <Td>{question.questionText}</Td>
+                            <Td>
+                              <Box>
+                                <Text fontWeight="bold">{question.questionText}</Text>
+                                <Box mt={2} ml={2}>
+                                  {question.options.map((option) => (
+                                    <Text key={option} fontSize="sm" color="gray.600">
+                                      {option}: {question.answers?.[option] || 0} votes
+                                    </Text>
+                                  ))}
+                                </Box>
+                              </Box>
+                            </Td>
                             <Td>
                               <Badge colorScheme={question.active ? 'green' : 'gray'}>
                                 {question.active ? 'Active' : 'Inactive'}
@@ -737,11 +795,14 @@ const AdminPanel = () => {
             </AlertDialogHeader>
 
             <AlertDialogBody>
-              Are you sure you want to delete all questions? This action cannot be undone and will remove all questions including the active one.
+              Are you sure you want to delete all questions? This action cannot be undone.
             </AlertDialogBody>
 
             <AlertDialogFooter>
-              <Button ref={cancelRef} onClick={() => setIsDeleteAllQuestionsAlertOpen(false)}>
+              <Button 
+                ref={cancelRef} 
+                onClick={() => setIsDeleteAllQuestionsAlertOpen(false)}
+              >
                 Cancel
               </Button>
               <Button 
@@ -751,7 +812,44 @@ const AdminPanel = () => {
                 isLoading={deleteAllQuestionsLoading}
                 loadingText="Deleting"
               >
-                Delete All
+                Delete
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialogOverlay>
+      </AlertDialog>
+
+      {/* Delete All Users Alert Dialog */}
+      <AlertDialog
+        isOpen={isDeleteAllUsersAlertOpen}
+        leastDestructiveRef={cancelRef}
+        onClose={() => setIsDeleteAllUsersAlertOpen(false)}
+      >
+        <AlertDialogOverlay>
+          <AlertDialogContent>
+            <AlertDialogHeader fontSize="lg" fontWeight="bold">
+              Delete All Non-Admin Users
+            </AlertDialogHeader>
+
+            <AlertDialogBody>
+              Are you sure you want to delete all non-admin users? This action cannot be undone.
+            </AlertDialogBody>
+
+            <AlertDialogFooter>
+              <Button 
+                ref={cancelRef} 
+                onClick={() => setIsDeleteAllUsersAlertOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button 
+                colorScheme="red" 
+                onClick={confirmDeleteAllUsers} 
+                ml={3}
+                isLoading={deleteAllUsersLoading}
+                loadingText="Deleting"
+              >
+                Delete
               </Button>
             </AlertDialogFooter>
           </AlertDialogContent>
