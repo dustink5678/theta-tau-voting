@@ -70,7 +70,8 @@ const Login = () => {
         <Image 
           src={thetaTauLogo}
           alt="Theta Tau Logo" 
-          boxSize="100px" 
+          height="100px"
+          objectFit="contain"
           mb={6}
         />
         <Heading mb={6}>Theta Tau Voting</Heading>
