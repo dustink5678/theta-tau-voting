@@ -90,7 +90,7 @@ const Navbar = () => {
         >
           <TabList>
             <Tab>Admin Panel</Tab>
-            <Tab>Dashboard</Tab>
+            <Tab>Voting</Tab>
           </TabList>
         </Tabs>
       )}

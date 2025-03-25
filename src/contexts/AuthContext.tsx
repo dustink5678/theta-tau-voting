@@ -76,23 +76,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                     ...userData,
                     uid: firebaseUser.uid,
                   });
-                  
-                  // If user is unverified, redirect to login immediately
-                  if (userData.verified === false) {
-                    console.log("User unverified, redirecting to login");
+                // Update this section in the onSnapshot callback
+                if (userData.verified === false) {
+                  console.log("User unverified, redirecting to login");
+                  if (wasVerifiedButNowUnverified) {
                     navigate('/login');
-                    
-                    // If this was a change from verified to unverified, sign out completely
-                    if (wasVerifiedButNowUnverified) {
-                      handleSignOut();
-                    }
+                    handleSignOut();
+                  } else {
+                    // For new unverified users, stay on the page but update UI accordingly
+                    // You might want to show a verification pending message instead
                   }
-                } else {
-                  // Document deleted or doesn't exist anymore
-                  setUser(null);
-                  navigate('/login');
-                  handleSignOut();
                 }
+              }
               }, 
               (error: FirestoreError) => {
                 console.error("Error listening to user document:", error);

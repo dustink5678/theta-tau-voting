@@ -11,6 +11,7 @@ import {
 import { FcGoogle } from 'react-icons/fc';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import thetaTauLogo from '../assets/logo.png';
 
 const Login = () => {
   const { signInWithGoogle, user } = useAuth();
@@ -67,7 +68,7 @@ const Login = () => {
         borderRadius="md"
       >
         <Image 
-          src="/logo.png" 
+          src={thetaTauLogo}
           alt="Theta Tau Logo" 
           boxSize="100px" 
           mb={6}

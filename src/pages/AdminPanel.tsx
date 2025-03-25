@@ -323,21 +323,6 @@ const AdminPanel = () => {
     
     setDeleteQuestionLoading(true);
     try {
-      // Check if question is active
-      if (questionToDelete.active) {
-        // Cannot delete active question
-        toast({
-          title: 'Cannot delete active question',
-          description: 'Please deactivate the question first or create a new active question.',
-          status: 'error',
-          duration: 3000,
-        });
-        setDeleteQuestionLoading(false);
-        onDeleteQuestionAlertClose();
-        setQuestionToDelete(null);
-        return;
-      }
-      
       // Delete the question document from Firestore
       await deleteDoc(doc(db, 'questions', questionToDelete.questionId));
       
@@ -555,18 +540,16 @@ const AdminPanel = () => {
                                     Redo
                                   </Button>
                                 )}
-                                {!question.active && (
-                                  <Tooltip label="Delete question" hasArrow>
-                                    <IconButton
-                                      icon={<FiTrash2 />}
-                                      aria-label="Delete question"
-                                      colorScheme="red"
-                                      variant="solid"
-                                      size="sm"
-                                      onClick={() => handleDeleteQuestion(question)}
-                                    />
-                                  </Tooltip>
-                                )}
+                                <Tooltip label="Delete question" hasArrow>
+                                  <IconButton
+                                    icon={<FiTrash2 />}
+                                    aria-label="Delete question"
+                                    colorScheme="red"
+                                    variant="solid"
+                                    size="sm"
+                                    onClick={() => handleDeleteQuestion(question)}
+                                  />
+                                </Tooltip>
                               </HStack>
                             </Td>
                           </Tr>
