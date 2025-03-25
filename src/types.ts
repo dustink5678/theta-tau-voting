@@ -1,0 +1,1 @@
+// This file is deleted since the types are defined in src/types/index.ts 

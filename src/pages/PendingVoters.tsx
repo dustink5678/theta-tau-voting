@@ -5,8 +5,9 @@ import {
   Text,
   List,
   ListItem,
+  Flex,
   Container,
-  Badge
+  Badge,
 } from '@chakra-ui/react';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';

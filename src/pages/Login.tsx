@@ -11,12 +11,9 @@ import {
 import { FcGoogle } from 'react-icons/fc';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import logo from '../../logo.png';
-import { GoogleAuthProvider, signInWithRedirect } from 'firebase/auth';
-import { auth } from '../config/firebase';
 
 const Login = () => {
-  const { user } = useAuth();
+  const { signInWithGoogle, user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const toast = useToast();
   const navigate = useNavigate();
@@ -35,8 +32,7 @@ const Login = () => {
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
     try {
-      const provider = new GoogleAuthProvider();
-      await signInWithRedirect(auth, provider);
+      await signInWithGoogle();
     } catch (error) {
       console.error('Error signing in with Google:', error);
       toast({
@@ -71,8 +67,8 @@ const Login = () => {
         borderRadius="md"
       >
         <Image 
-          src={logo} 
-          alt="Logo" 
+          src="/logo.png" 
+          alt="Theta Tau Logo" 
           boxSize="100px" 
           mb={6}
         />

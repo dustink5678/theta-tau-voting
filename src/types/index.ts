@@ -1,7 +1,7 @@
 export interface User {
   uid: string;
   displayName: string;
-  name?: string;
+  name?: string; // Keep for backward compatibility
   email: string;
   photoURL?: string;
   verified: boolean;

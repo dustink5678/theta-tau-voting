@@ -8,6 +8,7 @@ import UserDashboard from './pages/UserDashboard';
 import PendingVoters from './pages/PendingVoters';
 import LoadingScreen from './components/LoadingScreen';
 import Navbar from './components/Navbar';
+import { User } from './types';
 
 // Create a custom maroon theme
 const theme = extendTheme({
