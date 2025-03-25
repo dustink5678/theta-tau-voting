@@ -53,7 +53,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         userDocUnsubscribe();
         userDocUnsubscribe = null;
       }
-
+  
       if (firebaseUser) {
         try {
           // First check if the user document exists
@@ -61,7 +61,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           const userSnapshot = await getDoc(userDocRef);
           
           if (userSnapshot.exists()) {
-            // User exists in Firestore, set up real-time listener
+            // Initialize user data before setting up the listener
+            const userData = userSnapshot.data() as User;
+            setUser({
+              ...userData,
+              uid: firebaseUser.uid,
+            });
+            
+            // Now set up real-time listener
             userDocUnsubscribe = onSnapshot(
               userDocRef, 
               (doc) => {
@@ -76,18 +83,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                     ...userData,
                     uid: firebaseUser.uid,
                   });
-                // Update this section in the onSnapshot callback
-                if (userData.verified === false) {
-                  console.log("User unverified, redirecting to login");
-                  if (wasVerifiedButNowUnverified) {
-                    navigate('/login');
-                    handleSignOut();
-                  } else {
-                    // For new unverified users, stay on the page but update UI accordingly
-                    // You might want to show a verification pending message instead
+                  
+                  // Update this section in the onSnapshot callback
+                  if (userData.verified === false) {
+                    console.log("User unverified, redirecting to login");
+                    if (wasVerifiedButNowUnverified) {
+                      navigate('/login');
+                      handleSignOut();
+                    } else {
+                      // For new unverified users, stay on the page but update UI accordingly
+                      // You might want to show a verification pending message instead
+                    }
                   }
                 }
-              }
               }, 
               (error: FirestoreError) => {
                 console.error("Error listening to user document:", error);
@@ -100,6 +108,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 }
               }
             );
+            
+            // Only set loading to false after we've initialized the user state
+            setLoading(false);
           } else {
             // New user, create a record in Firestore
             const newUser = {
@@ -146,19 +157,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 }
               }
             );
+            
+            // Set loading to false after initializing new user
+            setLoading(false);
           }
         } catch (error) {
           console.error('Error getting user data:', error);
           setUser(null);
+          setLoading(false);
         }
       } else {
         // User signed out
         setUser(null);
+        setLoading(false);
       }
-      
-      setLoading(false);
     });
-
+  
     // Cleanup function for when component unmounts
     return () => {
       authUnsubscribe();
@@ -166,7 +180,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         userDocUnsubscribe();
       }
     };
-  }, [navigate, handleSignOut]);
+  }, [navigate, handleSignOut, user?.verified]);
 
   const signInWithGoogle = async (): Promise<void> => {
     try {

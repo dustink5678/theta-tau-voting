@@ -76,13 +76,29 @@ const PublicRoute = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
+// MODIFY THIS COMPONENT:
 const AppContent = () => {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
+  
+  // Add this check to prevent routing until authentication is complete
+  if (loading) {
+    return <LoadingScreen />;
+  }
   
   return (
     <Flex direction="column" width="100vw" minH="100vh" maxW="100vw" overflow="hidden">
       <Routes>
-        <Route path="/login" element={<Login />} />
+        <Route path="/login" element={
+          user ? (
+            user.role === 'admin' 
+              ? <Navigate to="/admin" /> 
+              : <Navigate to="/dashboard" />
+          ) : (
+            <PublicRoute>
+              <Login />
+            </PublicRoute>
+          )
+        } />
         <Route
           path="/admin"
           element={
@@ -116,6 +132,7 @@ const AppContent = () => {
     </Flex>
   );
 };
+
 
 const App = () => {
   return (
