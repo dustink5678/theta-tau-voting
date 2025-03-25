@@ -12,6 +12,8 @@ import { FcGoogle } from 'react-icons/fc';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import logo from '../../logo.png';
+import { GoogleAuthProvider, signInWithRedirect } from 'firebase/auth';
+import { auth } from '../../src/config/firebase';
 
 const Login = () => {
   const { signInWithGoogle, user } = useAuth();
@@ -33,7 +35,8 @@ const Login = () => {
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
     try {
-      await signInWithGoogle();
+      const provider = new GoogleAuthProvider();
+      await signInWithRedirect(auth, provider);
     } catch (error) {
       console.error('Error signing in with Google:', error);
       toast({
