@@ -274,31 +274,34 @@ const AdminPanel = () => {
   const handleActivateQuestion = async (questionId: string) => {
     try {
       const batch = writeBatch(db);
-
+  
       // Deactivate all questions
       for (const question of questions) {
         batch.update(doc(db, 'questions', question.questionId), { active: false });
       }
-
-      // Activate selected question
-      batch.update(doc(db, 'questions', questionId), { active: true });
-
+  
+      // Activate selected question and reset its answers
+      batch.update(doc(db, 'questions', questionId), { 
+        active: true,
+        answers: {} // Reset the answers object to clear vote counts
+      });
+  
       // Reset all users' answered status
       const usersSnapshot = await getDocs(collection(db, 'users'));
       usersSnapshot.docs.forEach((userDoc) => {
         batch.update(doc(db, 'users', userDoc.id), { answered: false });
       });
-
+  
       await batch.commit();
-
+  
       // Update local state to reflect changes immediately
       setUsers(users.map(user => ({
         ...user,
         answered: false
       })));
-
+  
       toast({
-        title: 'Question activated successfully',
+        title: 'Question reset and activated successfully',
         status: 'success',
         duration: 3000,
       });
@@ -589,7 +592,7 @@ const AdminPanel = () => {
                             </Td>
                             <Td>
                               <HStack spacing={2}>
-                                {!question.active && (
+                                {(
                                   <Button
                                     size="sm"
                                     colorScheme="green"

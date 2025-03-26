@@ -7,6 +7,8 @@ import {
   useToast,
   Flex,
   Image,
+  Center,
+  Spinner,
 } from '@chakra-ui/react';
 import { FcGoogle } from 'react-icons/fc';
 import { useAuth } from '../contexts/AuthContext';
@@ -34,6 +36,8 @@ const Login = () => {
     setIsLoading(true);
     try {
       await signInWithGoogle();
+      // Keep showing loading state - don't set isLoading to false
+      // because we want to show loading until redirect completes
     } catch (error) {
       console.error('Error signing in with Google:', error);
       toast({
@@ -43,10 +47,26 @@ const Login = () => {
         duration: 3000,
         isClosable: true,
       });
-    } finally {
-      setIsLoading(false);
+      setIsLoading(false); // Only reset loading state on error
     }
   };
+
+  // If we're loading, show a loading spinner instead of the login form
+  if (isLoading) {
+    return (
+      <Box 
+        width="100%" 
+        minH="calc(100vh - 56px)" 
+        display="flex" 
+        alignItems="center" 
+        justifyContent="center"
+      >
+        <Center>
+          <Spinner size="xl" color="blue.500" thickness="4px" />
+        </Center>
+      </Box>
+    );
+  }
 
   return (
     <Box 
@@ -82,7 +102,7 @@ const Login = () => {
           size="lg"
           colorScheme="blue"
           onClick={handleGoogleSignIn}
-          isLoading={isLoading}
+          isLoading={false}
           width="100%"
         >
           <Box mr={2}><FcGoogle size={20} /></Box>

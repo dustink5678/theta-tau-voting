@@ -183,12 +183,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [navigate, handleSignOut, user?.verified]);
 
   const signInWithGoogle = async (): Promise<void> => {
+    setLoading(true); // Set loading to true during sign-in process
     try {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
       // Navigation will happen via the useEffect watching the auth state
+      // Loading will be set to false by the auth state listener
     } catch (error) {
       console.error('Error signing in with Google:', error);
+      setLoading(false); // Reset loading state on error
       throw error;
     }
   };

@@ -8,7 +8,7 @@ import UserDashboard from './pages/UserDashboard';
 import PendingVoters from './pages/PendingVoters';
 import LoadingScreen from './components/LoadingScreen';
 import Navbar from './components/Navbar';
-import { User } from './types';
+import { User } from './types/index';
 
 // Create a custom maroon theme
 const theme = extendTheme({
@@ -69,6 +69,19 @@ const PrivateRoute = ({ children, adminOnly = false }: { children: React.ReactNo
 };
 
 const PublicRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user, loading } = useAuth();
+  
+  if (loading) {
+    return <LoadingScreen />;
+  }
+  
+  // If user is authenticated, redirect them immediately
+  if (user) {
+    return user.role === 'admin' 
+      ? <Navigate to="/admin" replace /> 
+      : <Navigate to="/dashboard" replace />;
+  }
+  
   return (
     <Box width="100vw" minH="100vh">
       {children}
@@ -80,7 +93,7 @@ const PublicRoute = ({ children }: { children: React.ReactNode }) => {
 const AppContent = () => {
   const { user, loading } = useAuth();
   
-  // Add this check to prevent routing until authentication is complete
+  // Show loading screen while determining authentication state
   if (loading) {
     return <LoadingScreen />;
   }
@@ -89,15 +102,9 @@ const AppContent = () => {
     <Flex direction="column" width="100vw" minH="100vh" maxW="100vw" overflow="hidden">
       <Routes>
         <Route path="/login" element={
-          user ? (
-            user.role === 'admin' 
-              ? <Navigate to="/admin" /> 
-              : <Navigate to="/dashboard" />
-          ) : (
-            <PublicRoute>
-              <Login />
-            </PublicRoute>
-          )
+          <PublicRoute>
+            <Login />
+          </PublicRoute>
         } />
         <Route
           path="/admin"
@@ -124,9 +131,13 @@ const AppContent = () => {
           }
         />
         <Route path="/" element={
-          user?.role === 'admin' 
-            ? <Navigate to="/admin" /> 
-            : <Navigate to="/dashboard" />
+          loading ? (
+            <LoadingScreen />
+          ) : user?.role === 'admin' ? (
+            <Navigate to="/admin" replace /> 
+          ) : (
+            <Navigate to="/dashboard" replace />
+          )
         } />
       </Routes>
     </Flex>
