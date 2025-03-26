@@ -2,13 +2,13 @@ import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { Box, Flex, ChakraProvider, extendTheme } from '@chakra-ui/react';
 import { AuthProvider } from './contexts/AuthContext';
 import { useAuth } from './contexts/AuthContext';
+import { DataProvider } from './contexts/DataContext';
 import Login from './pages/Login';
 import AdminPanel from './pages/AdminPanel'
 import UserDashboard from './pages/UserDashboard';
 import PendingVoters from './pages/PendingVoters';
 import LoadingScreen from './components/LoadingScreen';
 import Navbar from './components/Navbar';
-import { User } from './types/index';
 
 // Create a custom maroon theme
 const theme = extendTheme({
@@ -42,17 +42,17 @@ const theme = extendTheme({
 
 const PrivateRoute = ({ children, adminOnly = false }: { children: React.ReactNode; adminOnly?: boolean }) => {
   const { user, loading } = useAuth();
-
+  
   if (loading) {
     return <LoadingScreen />;
   }
 
   if (!user) {
-    return <Navigate to="/login" />;
+    return <Navigate to="/login" replace />;
   }
 
   if (adminOnly && user.role !== 'admin') {
-    return <Navigate to="/dashboard" />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   // Calculate content height based on whether user is admin (with tabs) or not
@@ -150,7 +150,9 @@ const App = () => {
     <ChakraProvider theme={theme}>
       <Router>
         <AuthProvider>
-          <AppContent />
+          <DataProvider>
+            <AppContent />
+          </DataProvider>
         </AuthProvider>
       </Router>
     </ChakraProvider>

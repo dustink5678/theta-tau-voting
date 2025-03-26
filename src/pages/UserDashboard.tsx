@@ -10,15 +10,16 @@ import {
   RadioGroup,
   Flex,
   Center,
+  Spinner,
 } from '@chakra-ui/react';
-import { collection, query, where, onSnapshot, updateDoc, doc, getDoc } from 'firebase/firestore';
+import { updateDoc, doc, getDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { Question } from '../types/index';
 import { useAuth } from '../contexts/AuthContext';
+import { useData } from '../contexts/DataContext';
 
 const UserDashboard = () => {
   const { user } = useAuth();
-  const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
+  const { currentQuestion, isDataLoading } = useData();
   const [selectedOption, setSelectedOption] = useState<string>('');
   const [isVoting, setIsVoting] = useState(false);
   const [hasVoted, setHasVoted] = useState(false);
@@ -26,41 +27,7 @@ const UserDashboard = () => {
 
   useEffect(() => {
     if (!user) return;
-    
-    // Set initial voted state from user
     setHasVoted(user.answered);
-    
-    // Subscribe to active question
-    const questionsQuery = query(
-      collection(db, 'questions'),
-      where('active', '==', true)
-    );
-    
-    const unsubscribe = onSnapshot(questionsQuery, (snapshot) => {
-      if (!snapshot.empty) {
-        const questionDoc = snapshot.docs[0];
-        const questionData = questionDoc.data();
-        setCurrentQuestion({
-          ...questionData,
-          questionId: questionDoc.id,
-        } as Question);
-      } else {
-        setCurrentQuestion(null);
-      }
-    });
-
-    // Subscribe to user document to track answered status
-    const userUnsubscribe = onSnapshot(doc(db, 'users', user.uid), (docSnapshot) => {
-      if (docSnapshot.exists()) {
-        const userData = docSnapshot.data();
-        setHasVoted(userData.answered);
-      }
-    });
-
-    return () => {
-      unsubscribe();
-      userUnsubscribe();
-    };
   }, [user]);
 
   const handleVote = async () => {
@@ -231,7 +198,13 @@ const UserDashboard = () => {
       alignItems="center" 
       justifyContent="center"
     >
-      {renderContent()}
+      {isDataLoading && !currentQuestion ? (
+        <Center>
+          <Spinner size="xl" color="blue.500" thickness="4px" />
+        </Center>
+      ) : (
+        renderContent()
+      )}
     </Box>
   );
 };

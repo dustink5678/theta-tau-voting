@@ -38,15 +38,35 @@ const Login = () => {
       await signInWithGoogle();
       // Keep showing loading state - don't set isLoading to false
       // because we want to show loading until redirect completes
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error signing in with Google:', error);
+      
+      // Show more specific error messages based on the error
+      const errorMessage = error.message || 'Please try again later.';
+      
       toast({
         title: 'Authentication failed',
-        description: 'Please try again later.',
+        description: errorMessage,
         status: 'error',
-        duration: 3000,
+        duration: 5000,
         isClosable: true,
       });
+      
+      // If it's a Safari-specific error, show additional guidance
+      if (errorMessage.toLowerCase().includes('cookies') || 
+          errorMessage.toLowerCase().includes('safari') ||
+          errorMessage.toLowerCase().includes('storage')) {
+        setTimeout(() => {
+          toast({
+            title: 'Browser Privacy Settings',
+            description: 'If using Safari or a private browser, please enable cookies and website data for this site.',
+            status: 'info',
+            duration: 8000,
+            isClosable: true,
+          });
+        }, 1000);
+      }
+      
       setIsLoading(false); // Only reset loading state on error
     }
   };
