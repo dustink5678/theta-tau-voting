@@ -185,6 +185,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const signInWithGoogle = async (): Promise<void> => {
     setLoading(true); // Set loading to true during sign-in process
     try {
+      // At the beginning of your signInWithGoogle function
+      if (/^((?!chrome|android).)*safari/i.test(navigator.userAgent)) {
+        // Safari-specific handling
+        try {
+          localStorage.setItem('test-storage-access', 'true');
+          localStorage.removeItem('test-storage-access');
+        } catch (storageError) {
+          // Handle storage access issues in Safari
+          throw new Error('Please enable cookies in Safari to allow authentication');
+        }
+      }
+      
       const provider = new GoogleAuthProvider();
       
       // Add additional configuration to make sign-in more robust
@@ -194,44 +206,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         prompt: 'select_account'
       });
       
-      // Try popup first (more reliable across browsers)
+      // Check if device is mobile
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      
+      // For mobile, use redirect
+      if (isMobile) {
+        // We're not using redirect for now as it causes issues
+        // Just continue with popup and let it handle fallbacks
+        console.log('Mobile device detected, but still using popup for consistency');
+      }
+      
+      // For all devices, use popup with fallback handling
       try {
         await signInWithPopup(auth, provider);
       } catch (popupError: any) {
-        console.warn("Popup sign-in failed, falling back to redirect:", popupError);
-        
-        // If popup blocked or not supported, try redirect as fallback
-        // But only on specific errors related to popup blocking
-        if (
-          popupError.code === 'auth/popup-blocked' || 
-          popupError.code === 'auth/popup-closed-by-user' ||
-          popupError.code === 'auth/cancelled-popup-request'
-        ) {
-          // For redirect, we need localStorage to store the redirect result
-          // Show an error message asking user to enable cookies if in Safari
-          if (
-            /^((?!chrome|android).)*safari/i.test(navigator.userAgent) && 
-            !localStorage.getItem('test-storage-access')
-          ) {
-            try {
-              // Test if we can write to localStorage
-              localStorage.setItem('test-storage-access', 'true');
-              localStorage.removeItem('test-storage-access');
-            } catch (storageError) {
-              throw new Error(
-                'Please enable cookies and website data in your browser settings for this site. ' +
-                'Safari\'s Intelligent Tracking Prevention may be blocking authentication.'
-              );
-            }
-          }
-          
-          // Redirect flow should be avoided if possible, but used as fallback
-          throw popupError; // Don't use redirect - just propagate the original error for now
+        console.log('Popup error:', popupError.code);
+        if (popupError.code === 'auth/popup-blocked' || 
+            popupError.code === 'auth/popup-closed-by-user') {
+          // Instead of redirect, just throw the error for better handling
+          throw popupError;
         } else {
-          // For other errors, throw the original
           throw popupError;
         }
       }
+      
       // Navigation will happen via the useEffect watching the auth state
       // Loading will be set to false by the auth state listener
     } catch (error: any) {
@@ -241,14 +239,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       // Provide better error messages to the user
       let errorMessage = 'Authentication failed. Please try again.';
       
-      if (error.message && error.message.includes('cookies and website data')) {
+      if (error.message && error.message.includes('cookies')) {
         errorMessage = error.message;
       } else if (error.code === 'auth/network-request-failed') {
         errorMessage = 'Network error. Please check your internet connection.';
+      } else if (error.code === 'auth/popup-blocked') {
+        errorMessage = 'Popup was blocked. Please allow popups for this website.';
+      } else if (error.code === 'auth/popup-closed-by-user') {
+        errorMessage = 'Sign-in was cancelled. Please try again.';
       } else if (error.code === 'auth/user-disabled') {
         errorMessage = 'This account has been disabled. Please contact support.';
       } else if (error.code === 'auth/web-storage-unsupported') {
-        errorMessage = 'Your browser doesn\'t support web storage. Please enable cookies or try a different browser.';
+        errorMessage = 'Your browser does not support web storage. Please enable cookies.';
       }
       
       throw new Error(errorMessage);

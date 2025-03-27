@@ -20,22 +20,14 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 
 // Set persistence to local to fix Safari and mobile browser issues
-// Try different persistence mechanisms in order of preference
+// Simplified persistence approach for better cross-browser compatibility
 const initializeAuth = async () => {
   try {
-    // First try using IndexedDB (most reliable across browsers)
-    await setPersistence(auth, indexedDBLocalPersistence);
-    console.log("Using indexedDB persistence");
+    await setPersistence(auth, browserLocalPersistence);
+    console.log("Using localStorage persistence");
   } catch (error) {
-    try {
-      // Fall back to localStorage if IndexedDB fails
-      await setPersistence(auth, browserLocalPersistence);
-      console.log("Using localStorage persistence");
-    } catch (error) {
-      // Last resort - in-memory only (session only)
-      await setPersistence(auth, inMemoryPersistence);
-      console.log("Using in-memory persistence");
-    }
+    console.error("Failed to set auth persistence:", error);
+    // No fallback - just log the error
   }
 };
 

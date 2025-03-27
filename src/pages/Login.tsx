@@ -114,7 +114,7 @@ const Login = () => {
           objectFit="contain"
           mb={6}
         />
-        <Heading mb={6}>Theta Tau Voting</Heading>
+        <Heading mb={6} textAlign="center">Theta Tau Voting System</Heading>
         <Text mb={8} textAlign="center" color="gray.600">
           Sign in with your Google account to participate in chapter voting
         </Text>
