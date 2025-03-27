@@ -1,24 +1,21 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
 import { 
   GoogleAuthProvider, 
   signInWithPopup, 
-  signInWithRedirect,
-  getRedirectResult,
   signOut as firebaseSignOut,
-  onAuthStateChanged
+  onAuthStateChanged,
+  User as FirebaseUser
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, onSnapshot, FirestoreError, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, onSnapshot, FirestoreError } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
 import { User } from '../types/index';
 import { useNavigate } from 'react-router-dom';
 import LoadingScreen from '../components/LoadingScreen';
-import { Box, VStack, Heading, Text, Button, Flex, Image, useToast } from '@chakra-ui/react';
-import { FcGoogle } from 'react-icons/fc';
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  error: string | null;
+  signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -33,299 +30,237 @@ export const useAuth = () => {
 };
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [state, setState] = useState<{
-    user: User | null;
-    loading: boolean;
-    error: string | null;
-  }>({
-    user: null,
-    loading: true,
-    error: null
-  });
-  
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
-  const toast = useToast();
 
-  // Handle user document creation/update
-  const createUserDocument = async (firebaseUser: any) => {
-    if (!firebaseUser) return false;
-    
+  const handleSignOut = useCallback(async () => {
     try {
-      const userRef = doc(db, 'users', firebaseUser.uid);
-      const userSnapshot = await getDoc(userRef);
-      
-      const userData = {
-        email: firebaseUser.email || '',
-        displayName: firebaseUser.displayName || '',
-        photoURL: firebaseUser.photoURL || '',
-        role: 'user' as const,
-        verified: userSnapshot.exists() ? userSnapshot.data().verified : false,
-        answered: userSnapshot.exists() ? userSnapshot.data().answered : false,
-        lastLogin: serverTimestamp(),
-      };
-      
-      await setDoc(userRef, userData, { merge: true });
-      return true;
+      await firebaseSignOut(auth);
+      setUser(null);
+      navigate('/login');
     } catch (error) {
-      console.error('Error saving user data:', error);
-      return false;
+      console.error('Error signing out:', error);
     }
-  };
+  }, [navigate]);
 
   useEffect(() => {
-    let isMounted = true;
     let userDocUnsubscribe: (() => void) | null = null;
-
-    // First, check for redirect result
-    getRedirectResult(auth)
-      .then(async (result) => {
-        if (!isMounted) return;
-        
-        if (result?.user) {
-          try {
-            await createUserDocument(result.user);
-            // Auth state listener will handle the rest
-          } catch (error) {
-            console.error('Error handling redirect result:', error);
-            setState(prev => ({
-              ...prev,
-              error: 'Failed to complete sign-in process. Please try again.',
-              loading: false
-            }));
-          }
-        }
-      })
-      .catch(error => {
-        console.error('Redirect result error:', error);
-        if (isMounted) {
-          setState(prev => ({
-            ...prev,
-            error: 'Unable to sign in. Please try again.',
-            loading: false
-          }));
-        }
-      });
-
-    // Set up auth state listener
+    
     const authUnsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (!isMounted) return;
-      
       // Clear previous listener if exists
       if (userDocUnsubscribe) {
         userDocUnsubscribe();
         userDocUnsubscribe = null;
       }
-
+  
       if (firebaseUser) {
         try {
           // First check if the user document exists
           const userDocRef = doc(db, 'users', firebaseUser.uid);
-          await createUserDocument(firebaseUser);
+          const userSnapshot = await getDoc(userDocRef);
           
-          // Now set up real-time listener for user data
-          userDocUnsubscribe = onSnapshot(
-            userDocRef, 
-            (doc) => {
-              if (doc.exists()) {
-                const userData = doc.data() as User;
-                
-                setState({
-                  user: {
+          if (userSnapshot.exists()) {
+            // Initialize user data before setting up the listener
+            const userData = userSnapshot.data() as User;
+            setUser({
+              ...userData,
+              uid: firebaseUser.uid,
+            });
+            
+            // Now set up real-time listener
+            userDocUnsubscribe = onSnapshot(
+              userDocRef, 
+              (doc) => {
+                if (doc.exists()) {
+                  const userData = doc.data() as User;
+                  
+                  // Check if user was previously verified but is now unverified
+                  const wasVerifiedButNowUnverified = user?.verified === true && userData.verified === false;
+                  
+                  // Set user data
+                  setUser({
                     ...userData,
                     uid: firebaseUser.uid,
-                  },
-                  loading: false,
-                  error: null
-                });
+                  });
+                  
+                  // Update this section in the onSnapshot callback
+                  if (userData.verified === false) {
+                    console.log("User unverified, redirecting to login");
+                    if (wasVerifiedButNowUnverified) {
+                      navigate('/login');
+                      handleSignOut();
+                    } else {
+                      // For new unverified users, stay on the page but update UI accordingly
+                      // You might want to show a verification pending message instead
+                    }
+                  }
+                }
+              }, 
+              (error: FirestoreError) => {
+                console.error("Error listening to user document:", error);
                 
-                // Redirect to home if user is verified
-                if (userData.verified) {
-                  navigate('/');
+                // If permission error, the user likely doesn't have access or was deleted
+                if (error.code === 'permission-denied') {
+                  setUser(null);
+                  navigate('/login');
+                  handleSignOut();
                 }
               }
-            }, 
-            (error: FirestoreError) => {
-              console.error("Error listening to user document:", error);
-              
-              // If permission error, the user likely doesn't have access or was deleted
-              if (error.code === 'permission-denied') {
-                setState({
-                  user: null,
-                  loading: false,
-                  error: 'Access denied. Please try again.'
-                });
-                firebaseSignOut(auth);
+            );
+            
+            // Only set loading to false after we've initialized the user state
+            setLoading(false);
+          } else {
+            // New user, create a record in Firestore
+            const newUser = {
+              email: firebaseUser.email || '',
+              displayName: firebaseUser.displayName || '',
+              photoURL: firebaseUser.photoURL || '',
+              role: 'user' as const,
+              verified: false,
+              answered: false,
+            };
+            
+            await setDoc(doc(db, 'users', firebaseUser.uid), newUser);
+            
+            // Set initial user state without waiting for listener
+            setUser({
+              ...newUser,
+              uid: firebaseUser.uid,
+            });
+            
+            // Set up listener for the newly created user with error handling
+            userDocUnsubscribe = onSnapshot(
+              doc(db, 'users', firebaseUser.uid), 
+              (doc) => {
+                if (doc.exists()) {
+                  const userData = doc.data() as User;
+                  setUser({
+                    ...userData,
+                    uid: firebaseUser.uid,
+                  });
+                } else {
+                  setUser(null);
+                  navigate('/login');
+                  handleSignOut();
+                }
+              },
+              (error: FirestoreError) => {
+                console.error("Error listening to user document:", error);
+                
+                // If permission error, the user was likely deleted
+                if (error.code === 'permission-denied') {
+                  setUser(null);
+                  navigate('/login');
+                  handleSignOut();
+                }
               }
-            }
-          );
+            );
+            
+            // Set loading to false after initializing new user
+            setLoading(false);
+          }
         } catch (error) {
           console.error('Error getting user data:', error);
-          setState({
-            user: null,
-            loading: false,
-            error: 'Failed to load user data. Please try again.'
-          });
+          setUser(null);
+          setLoading(false);
         }
       } else {
         // User signed out
-        setState({
-          user: null,
-          loading: false,
-          error: null
-        });
+        setUser(null);
+        setLoading(false);
       }
     });
   
     // Cleanup function for when component unmounts
     return () => {
-      isMounted = false;
       authUnsubscribe();
       if (userDocUnsubscribe) {
         userDocUnsubscribe();
       }
     };
-  }, [navigate]);
+  }, [navigate, handleSignOut, user?.verified]);
 
-  const handleSignIn = async () => {
+  const signInWithGoogle = async (): Promise<void> => {
+    setLoading(true); // Set loading to true during sign-in process
     try {
-      setState(prev => ({ ...prev, loading: true, error: null }));
-      
       const provider = new GoogleAuthProvider();
+      
+      // Add additional configuration to make sign-in more robust
       provider.setCustomParameters({
+        // Force account selection even if user has only one account
+        // This helps prevent some session issues
         prompt: 'select_account'
       });
       
-      // Detect if the user is on mobile
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      
-      if (isMobile) {
-        // For mobile devices, use redirect flow
-        await signInWithRedirect(auth, provider);
-        return; // The page will reload after redirect
-      }
-      
-      // For desktop, use popup first
+      // Try popup first (more reliable across browsers)
       try {
-        const result = await signInWithPopup(auth, provider);
-        // Auth state listener will handle setting the user
+        await signInWithPopup(auth, provider);
       } catch (popupError: any) {
-        console.warn("Popup sign-in failed:", popupError);
+        console.warn("Popup sign-in failed, falling back to redirect:", popupError);
         
-        // If popup blocked, try redirect as fallback
+        // If popup blocked or not supported, try redirect as fallback
+        // But only on specific errors related to popup blocking
         if (
           popupError.code === 'auth/popup-blocked' || 
           popupError.code === 'auth/popup-closed-by-user' ||
           popupError.code === 'auth/cancelled-popup-request'
         ) {
-          await signInWithRedirect(auth, provider);
-          return;
+          // For redirect, we need localStorage to store the redirect result
+          // Show an error message asking user to enable cookies if in Safari
+          if (
+            /^((?!chrome|android).)*safari/i.test(navigator.userAgent) && 
+            !localStorage.getItem('test-storage-access')
+          ) {
+            try {
+              // Test if we can write to localStorage
+              localStorage.setItem('test-storage-access', 'true');
+              localStorage.removeItem('test-storage-access');
+            } catch (storageError) {
+              throw new Error(
+                'Please enable cookies and website data in your browser settings for this site. ' +
+                'Safari\'s Intelligent Tracking Prevention may be blocking authentication.'
+              );
+            }
+          }
+          
+          // Redirect flow should be avoided if possible, but used as fallback
+          throw popupError; // Don't use redirect - just propagate the original error for now
+        } else {
+          // For other errors, throw the original
+          throw popupError;
         }
-        throw popupError;
       }
+      // Navigation will happen via the useEffect watching the auth state
+      // Loading will be set to false by the auth state listener
     } catch (error: any) {
-      console.error('Sign in error:', error);
-      setState(prev => ({
-        ...prev,
-        error: 'Unable to sign in. Please try again.',
-        loading: false
-      }));
-      toast({
-        title: "Authentication Error",
-        description: "Failed to sign in. Please try again.",
-        status: "error",
-        duration: 5000,
-        isClosable: true,
-      });
+      console.error('Error signing in with Google:', error);
+      setLoading(false); // Reset loading state on error
+      
+      // Provide better error messages to the user
+      let errorMessage = 'Authentication failed. Please try again.';
+      
+      if (error.message && error.message.includes('cookies and website data')) {
+        errorMessage = error.message;
+      } else if (error.code === 'auth/network-request-failed') {
+        errorMessage = 'Network error. Please check your internet connection.';
+      } else if (error.code === 'auth/user-disabled') {
+        errorMessage = 'This account has been disabled. Please contact support.';
+      } else if (error.code === 'auth/web-storage-unsupported') {
+        errorMessage = 'Your browser doesn\'t support web storage. Please enable cookies or try a different browser.';
+      }
+      
+      throw new Error(errorMessage);
     }
   };
 
-  const handleSignOut = async () => {
-    try {
-      await firebaseSignOut(auth);
-      // Auth state listener will handle resetting the user state
-    } catch (error) {
-      console.error('Error signing out:', error);
-      toast({
-        title: "Sign Out Error",
-        description: "Failed to sign out. Please try again.",
-        status: "error",
-        duration: 5000,
-        isClosable: true,
-      });
-    }
-  };
-
-  if (state.loading) {
+  if (loading) {
     return <LoadingScreen />;
   }
 
-  // If user is not authenticated, show login screen
-  if (!state.user) {
-    return (
-      <Box 
-        minH="100vh" 
-        display="flex" 
-        flexDirection="column" 
-        bg="linear-gradient(to bottom right, #1a365d, #2a4365, #1a365d)"
-        color="white"
-      >
-        <Flex flex="1" alignItems="center" justifyContent="center" p={6}>
-          <VStack w="full" maxW="md" spacing={12} textAlign="center">
-            {/* Logo and Title */}
-            <VStack>
-              <Box bg="whiteAlpha.200" backdropFilter="blur(10px)" borderRadius="xl" p={6} mb={8} display="inline-block">
-                <Image src="/logo.png" alt="Theta Tau Logo" h="80px" fallbackSrc="https://thetatauvoting-8a0d0.web.app/logo.png" />
-              </Box>
-              <Heading size="xl" mb={4}>Theta Tau Voting</Heading>
-              <Text fontSize="lg" color="blue.200">Voting made simple for our organization</Text>
-            </VStack>
-
-            {/* Sign In Button */}
-            <VStack mt={8} spacing={4} w="full">
-              {state.error && (
-                <Box mb={4} p={4} bg="rgba(153, 27, 27, 0.5)" border="1px" borderColor="red.700" borderRadius="lg">
-                  <Text fontSize="sm" color="red.200" textAlign="center">{state.error}</Text>
-                </Box>
-              )}
-              
-              <Button
-                onClick={handleSignIn}
-                isDisabled={state.loading}
-                w="full"
-                display="flex"
-                alignItems="center"
-                justifyContent="center"
-                gap={3}
-                bg="whiteAlpha.200"
-                _hover={{ bg: "whiteAlpha.300" }}
-                color="white"
-                borderRadius="xl"
-                px={6}
-                py={6}
-                fontSize="lg"
-                fontWeight="medium"
-                backdropFilter="blur(8px)"
-                transition="all 0.2s"
-                border="1px"
-                borderColor="whiteAlpha.300"
-                leftIcon={<FcGoogle size="24px" />}
-              >
-                Continue with Google
-              </Button>
-            </VStack>
-          </VStack>
-        </Flex>
-      </Box>
-    );
-  }
-
   return (
-    <AuthContext.Provider value={{ 
-      user: state.user, 
-      loading: state.loading, 
-      error: state.error,
-      signOut: handleSignOut
-    }}>
+    <AuthContext.Provider value={{ user, loading, signInWithGoogle, signOut: handleSignOut }}>
       {children}
     </AuthContext.Provider>
   );

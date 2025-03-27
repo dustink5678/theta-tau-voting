@@ -1,14 +1,29 @@
 [
   {
     "origin": [
-      "http://localhost:5173",
       "http://localhost:5174",
       "http://localhost:5175",
+      "http://localhost:5176",
+      "http://localhost:5177",
+      "http://localhost:5178",
+      "http://localhost:5179",
+      "http://localhost:5180",
+      "http://localhost:3000",
       "https://thetatauvoting-8a0d0.web.app",
       "https://thetatauvoting-8a0d0.firebaseapp.com"
     ],
-    "method": ["GET", "PUT", "POST", "DELETE", "HEAD"],
+    "method": ["GET", "PUT", "POST", "DELETE", "HEAD", "OPTIONS"],
     "maxAgeSeconds": 3600,
-    "responseHeader": ["Content-Type", "Authorization", "Content-Length", "User-Agent", "x-goog-resumable"]
+    "responseHeader": [
+      "Content-Type", 
+      "Authorization", 
+      "Content-Length", 
+      "User-Agent", 
+      "x-goog-resumable",
+      "Access-Control-Allow-Origin",
+      "Access-Control-Allow-Methods",
+      "Access-Control-Allow-Headers",
+      "Access-Control-Max-Age"
+    ]
   }
 ] 

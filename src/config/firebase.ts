@@ -1,13 +1,6 @@
 import { initializeApp } from 'firebase/app';
-import { 
-  getAuth, 
-  setPersistence, 
-  browserLocalPersistence, 
-  indexedDBLocalPersistence, 
-  inMemoryPersistence,
-  connectAuthEmulator
-} from 'firebase/auth';
-import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
+import { getAuth, setPersistence, browserLocalPersistence, indexedDBLocalPersistence, inMemoryPersistence } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
 import { getAnalytics } from 'firebase/analytics';
 
 const firebaseConfig = {
@@ -26,24 +19,19 @@ const app = initializeApp(firebaseConfig);
 // Initialize Firebase services
 export const auth = getAuth(app);
 
-// Configure auth settings to improve reliability on mobile
-// Enable session cookies for better persistence across mobile browsers
-auth.settings.appVerificationDisabledForTesting = false; // Ensure full security
-
-// Set persistence in a more optimized way for mobile browsers
+// Set persistence to local to fix Safari and mobile browser issues
+// Try different persistence mechanisms in order of preference
 const initializeAuth = async () => {
   try {
     // First try using IndexedDB (most reliable across browsers)
     await setPersistence(auth, indexedDBLocalPersistence);
     console.log("Using indexedDB persistence");
   } catch (error) {
-    console.warn("IndexedDB persistence failed, falling back:", error);
     try {
       // Fall back to localStorage if IndexedDB fails
       await setPersistence(auth, browserLocalPersistence);
       console.log("Using localStorage persistence");
-    } catch (secondError) {
-      console.warn("localStorage persistence failed, falling back:", secondError);
+    } catch (error) {
       // Last resort - in-memory only (session only)
       await setPersistence(auth, inMemoryPersistence);
       console.log("Using in-memory persistence");

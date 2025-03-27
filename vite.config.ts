@@ -9,6 +9,7 @@ export default defineConfig({
     outDir: 'dist',
     target: 'es2015',
     assetsDir: 'assets',
+    sourcemap: false
   },
 })
 

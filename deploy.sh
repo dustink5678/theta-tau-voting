@@ -10,7 +10,7 @@ print_step() {
   echo -e "${YELLOW}==>${NC} $1"
 }
 
-# Add all files to git
+# Add all files to git if needed
 print_step "Adding all files to git"
 git add .
 
@@ -31,18 +31,6 @@ fi
 print_step "Pushing to remote repository"
 git push
 
-# Check if push was successful
-if [ $? -eq 0 ]; then
-  print_step "Git push successful"
-else
-  echo -e "${YELLOW}Git push failed. Do you want to continue with build and deploy? (y/n)${NC}"
-  read continue_choice
-  if [[ ! $continue_choice =~ ^[Yy]$ ]]; then
-    echo "Exiting script"
-    exit 1
-  fi
-fi
-
 # Run build
 print_step "Building the application"
 npm run build
@@ -55,23 +43,15 @@ else
   exit 1
 fi
 
-# Create a 404.html file for SPA routing
-print_step "Creating 404.html for SPA routing"
-cp dist/index.html dist/404.html
-
-# Set Firebase Storage CORS configuration
-print_step "Setting Firebase Storage CORS configuration"
-firebase storage:cors set cors.json
-
-# Deploy to Firebase
+# Run Firebase deployment
 print_step "Deploying the application to Firebase"
-firebase deploy --only hosting
+firebase deploy
 
 # Check if deployment was successful
 if [ $? -eq 0 ]; then
-  echo -e "${GREEN}Deployment successful!${NC}"
+  echo -e "${GREEN}Firebase deployment successful!${NC}"
 else
-  echo -e "${YELLOW}Deployment failed.${NC}"
+  echo -e "${YELLOW}Firebase deployment failed.${NC}"
   exit 1
 fi
 

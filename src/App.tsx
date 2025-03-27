@@ -3,6 +3,7 @@ import { Box, Flex, ChakraProvider, extendTheme } from '@chakra-ui/react';
 import { AuthProvider } from './contexts/AuthContext';
 import { useAuth } from './contexts/AuthContext';
 import { DataProvider } from './contexts/DataContext';
+import Login from './pages/Login';
 import AdminPanel from './pages/AdminPanel'
 import UserDashboard from './pages/UserDashboard';
 import PendingVoters from './pages/PendingVoters';
@@ -47,8 +48,7 @@ const PrivateRoute = ({ children, adminOnly = false }: { children: React.ReactNo
   }
 
   if (!user) {
-    // The AuthProvider will handle showing the login screen
-    return null;
+    return <Navigate to="/login" replace />;
   }
 
   if (adminOnly && user.role !== 'admin') {
@@ -68,18 +68,44 @@ const PrivateRoute = ({ children, adminOnly = false }: { children: React.ReactNo
   );
 };
 
+const PublicRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user, loading } = useAuth();
+  
+  if (loading) {
+    return <LoadingScreen />;
+  }
+  
+  // If user is authenticated, redirect them immediately
+  if (user) {
+    return user.role === 'admin' 
+      ? <Navigate to="/admin" replace /> 
+      : <Navigate to="/dashboard" replace />;
+  }
+  
+  return (
+    <Box width="100vw" minH="100vh">
+      {children}
+    </Box>
+  );
+};
+
+// MODIFY THIS COMPONENT:
 const AppContent = () => {
   const { user, loading } = useAuth();
   
-  // When loading or when there's no user, return null
-  // The AuthProvider will handle showing loading state or login screen
-  if (loading || !user) {
-    return null;
+  // Show loading screen while determining authentication state
+  if (loading) {
+    return <LoadingScreen />;
   }
   
   return (
     <Flex direction="column" width="100vw" minH="100vh" maxW="100vw" overflow="hidden">
       <Routes>
+        <Route path="/login" element={
+          <PublicRoute>
+            <Login />
+          </PublicRoute>
+        } />
         <Route
           path="/admin"
           element={
@@ -99,27 +125,25 @@ const AppContent = () => {
         <Route
           path="/pending"
           element={
-            user.verified ? (
-              <Navigate to={user.role === 'admin' ? '/admin' : '/dashboard'} replace />
-            ) : (
+            <PublicRoute>
               <PendingVoters />
-            )
+            </PublicRoute>
           }
         />
-        <Route 
-          path="*" 
-          element={
-            user.role === 'admin' ? (
-              <Navigate to="/admin" replace /> 
-            ) : (
-              <Navigate to="/dashboard" replace />
-            )
-          } 
-        />
+        <Route path="/" element={
+          loading ? (
+            <LoadingScreen />
+          ) : user?.role === 'admin' ? (
+            <Navigate to="/admin" replace /> 
+          ) : (
+            <Navigate to="/dashboard" replace />
+          )
+        } />
       </Routes>
     </Flex>
   );
 };
+
 
 const App = () => {
   return (
