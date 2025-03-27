@@ -3,14 +3,13 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "homepage": "https://dustink5678.github.io/theta-tau-voting/",
+  "homepage": "https://thetatauvoting-8a0d0.web.app/",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "tsc && vite build && cp dist/index.html dist/404.html",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
-    "predeploy": "npm run build && cp dist/index.html dist/404.html && touch dist/.nojekyll",
-    "deploy": "gh-pages -d dist"
+    "deploy": "firebase deploy --only hosting"
   },
   "dependencies": {
     "@chakra-ui/react": "^2.10.7",
@@ -32,7 +31,6 @@
     "eslint": "^8.55.0",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.5",
-    "gh-pages": "^6.3.0",
     "typescript": "^5.2.2",
     "vite": "^5.0.8"
   }

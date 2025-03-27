@@ -55,9 +55,13 @@ else
   exit 1
 fi
 
-# Run deploy
-print_step "Deploying the application"
-npm run deploy
+# Create a 404.html file for SPA routing
+print_step "Creating 404.html for SPA routing"
+cp dist/index.html dist/404.html
+
+# Deploy to Firebase
+print_step "Deploying the application to Firebase"
+firebase deploy --only hosting
 
 # Check if deployment was successful
 if [ $? -eq 0 ]; then

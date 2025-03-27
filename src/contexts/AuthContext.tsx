@@ -2,6 +2,8 @@ import React, { createContext, useContext, useEffect, useState, ReactNode, useCa
 import { 
   GoogleAuthProvider, 
   signInWithPopup, 
+  signInWithRedirect,
+  getRedirectResult,
   signOut as firebaseSignOut,
   onAuthStateChanged,
   User as FirebaseUser
@@ -43,6 +45,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       console.error('Error signing out:', error);
     }
   }, [navigate]);
+
+  // Check for redirect result on initial load (for mobile devices)
+  useEffect(() => {
+    const checkRedirectResult = async () => {
+      try {
+        const result = await getRedirectResult(auth);
+        if (result) {
+          console.log("Successful sign-in via redirect");
+          // Auth state listener will handle user state
+        }
+      } catch (error) {
+        console.error("Error processing redirect result:", error);
+      }
+    };
+
+    checkRedirectResult();
+  }, []);
 
   useEffect(() => {
     let userDocUnsubscribe: (() => void) | null = null;
@@ -194,45 +213,37 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         prompt: 'select_account'
       });
       
-      // Try popup first (more reliable across browsers)
+      // Detect if the user is on mobile
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      
+      if (isMobile) {
+        // For mobile devices, use redirect flow which works better
+        await signInWithRedirect(auth, provider);
+        // Control will return to the app after the redirect completes
+        // The redirect result will be handled in the useEffect above
+        return;
+      }
+      
+      // For desktop, use popup (more reliable)
       try {
         await signInWithPopup(auth, provider);
+        // Navigation will happen via the useEffect watching the auth state
       } catch (popupError: any) {
         console.warn("Popup sign-in failed, falling back to redirect:", popupError);
         
         // If popup blocked or not supported, try redirect as fallback
-        // But only on specific errors related to popup blocking
         if (
           popupError.code === 'auth/popup-blocked' || 
           popupError.code === 'auth/popup-closed-by-user' ||
           popupError.code === 'auth/cancelled-popup-request'
         ) {
-          // For redirect, we need localStorage to store the redirect result
-          // Show an error message asking user to enable cookies if in Safari
-          if (
-            /^((?!chrome|android).)*safari/i.test(navigator.userAgent) && 
-            !localStorage.getItem('test-storage-access')
-          ) {
-            try {
-              // Test if we can write to localStorage
-              localStorage.setItem('test-storage-access', 'true');
-              localStorage.removeItem('test-storage-access');
-            } catch (storageError) {
-              throw new Error(
-                'Please enable cookies and website data in your browser settings for this site. ' +
-                'Safari\'s Intelligent Tracking Prevention may be blocking authentication.'
-              );
-            }
-          }
-          
-          // Redirect flow should be avoided if possible, but used as fallback
-          throw popupError; // Don't use redirect - just propagate the original error for now
+          await signInWithRedirect(auth, provider);
+          return;
         } else {
           // For other errors, throw the original
           throw popupError;
         }
       }
-      // Navigation will happen via the useEffect watching the auth state
       // Loading will be set to false by the auth state listener
     } catch (error: any) {
       console.error('Error signing in with Google:', error);
