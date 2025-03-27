@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Authentication</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; connect-src *; img-src 'self' https://*.googleapis.com https://*.gstatic.com data:;">
+  <title>Authentication - Theta Tau Voting</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -43,41 +44,205 @@
     @keyframes spin {
       to { transform: rotate(360deg); }
     }
+    .button {
+      background-color: #3498db;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      margin-top: 20px;
+    }
+    .button:hover {
+      background-color: #2980b9;
+    }
+    .error {
+      color: #e74c3c;
+      font-weight: bold;
+      margin: 20px 0;
+    }
+    .recovery {
+      margin-top: 20px;
+      padding: 10px;
+      background-color: #f8d7da;
+      border-radius: 4px;
+    }
+    .recovery button {
+      background-color: #dc3545;
+      margin-top: 10px;
+    }
   </style>
 </head>
 <body>
   <div class="auth-container">
     <h1>Authentication in progress</h1>
-    <div class="spinner"></div>
-    <p>Please wait while we complete the authentication process...</p>
-    <p>This window will close automatically once authentication is complete.</p>
+    <div class="spinner" id="spinner"></div>
+    <p id="message">Please wait while we complete the authentication process...</p>
+    <p id="additional-info">This window should close automatically once authentication is complete.</p>
+    <p id="status-message"></p>
+    <div id="error-container" style="display: none;">
+      <p class="error" id="error-message"></p>
+    </div>
+    <div id="recovery-container" style="display: none;" class="recovery">
+      <p>If you're having trouble with authentication, try clearing your browser data:</p>
+      <button class="button" id="clear-storage-button">Clear Browser Data & Retry</button>
+    </div>
+    <button id="close-button" class="button" style="display: none;">Close Window</button>
+    <button id="redirect-button" class="button" style="display: none;">Return to App</button>
   </div>
 
   <script>
-    // This script helps handle authentication redirects and popups
+    // Improved authentication redirect handler
     window.onload = function() {
-      // Allow postMessage communication from our main domain
-      window.addEventListener('message', function(event) {
-        // Make sure the message is from our main application
-        if (event.origin === window.location.origin) {
-          if (event.data === 'auth-close') {
-            window.close();
+      const spinnerElement = document.getElementById('spinner');
+      const messageElement = document.getElementById('message');
+      const additionalInfoElement = document.getElementById('additional-info');
+      const statusMessageElement = document.getElementById('status-message');
+      const closeButtonElement = document.getElementById('close-button');
+      const redirectButtonElement = document.getElementById('redirect-button');
+      const errorContainerElement = document.getElementById('error-container');
+      const errorMessageElement = document.getElementById('error-message');
+      const recoveryContainerElement = document.getElementById('recovery-container');
+      const clearStorageButtonElement = document.getElementById('clear-storage-button');
+      
+      // Helper function to extract auth result from URL
+      function getAuthResultFromUrl() {
+        // Get the fragment identifier and query parameters
+        const hash = window.location.hash;
+        const search = window.location.search;
+        const hashParams = new URLSearchParams(hash.replace('#', ''));
+        const queryParams = new URLSearchParams(search);
+        
+        // Check if this contains auth tokens or state
+        const isSuccessful = hashParams.has('access_token') || 
+                            hashParams.has('id_token') || 
+                            hashParams.get('state') ||
+                            queryParams.has('code');
+                            
+        return {
+          isSuccessful,
+          hashParams,
+          queryParams,
+          hash,
+          search
+        };
+      }
+      
+      // Handle authentication result
+      function handleAuthResult() {
+        const result = getAuthResultFromUrl();
+        
+        // If we have an authentication result
+        if (result.isSuccessful) {
+          statusMessageElement.textContent = 'Authentication successful! Redirecting...';
+          
+          // Try to store success flag for detection in main app
+          try {
+            localStorage.setItem('auth_success', 'true');
+            localStorage.setItem('auth_timestamp', Date.now().toString());
+          } catch (e) {
+            console.warn('Unable to access localStorage', e);
+            try {
+              sessionStorage.setItem('auth_success', 'true');
+              sessionStorage.setItem('auth_timestamp', Date.now().toString());
+            } catch (e2) {
+              console.warn('Unable to access sessionStorage', e2);
+            }
           }
+          
+          // Attempt to notify parent window if this is a popup
+          if (window.opener) {
+            try {
+              window.opener.postMessage({
+                type: 'auth-complete',
+                success: true,
+                origin: window.location.origin
+              }, '*');
+              
+              // Close popup after a short delay
+              setTimeout(function() {
+                try {
+                  window.close();
+                  // If window doesn't close, show redirect button
+                  redirectButtonElement.style.display = 'inline-block';
+                } catch (e) {
+                  console.warn('Unable to close window automatically', e);
+                  redirectButtonElement.style.display = 'inline-block';
+                }
+              }, 1000);
+            } catch (e) {
+              console.error('Error during auth window communication:', e);
+              redirectButtonElement.style.display = 'inline-block';
+            }
+          } else {
+            // This is a redirect flow, redirect back to main app
+            messageElement.textContent = 'Authentication successful!';
+            additionalInfoElement.textContent = 'Redirecting you back to the application...';
+            
+            // Redirect to main app after a short delay
+            setTimeout(function() {
+              window.location.href = window.location.origin + '/?auth=complete';
+            }, 1500);
+          }
+        } else {
+          // No authentication data found, check for error
+          const errorCode = result.queryParams.get('error');
+          const errorMessage = result.queryParams.get('error_description') || 'Authentication failed';
+          
+          if (errorCode) {
+            // Show error message
+            spinnerElement.style.display = 'none';
+            messageElement.textContent = 'Authentication failed';
+            additionalInfoElement.textContent = '';
+            errorContainerElement.style.display = 'block';
+            errorMessageElement.textContent = `Error: ${errorMessage} (${errorCode})`;
+            
+            // Show recovery options for authentication errors
+            recoveryContainerElement.style.display = 'block';
+            redirectButtonElement.style.display = 'inline-block';
+          } else {
+            // No error but also no success - might be a fresh load of the page
+            messageElement.textContent = 'Waiting for authentication...';
+            // After 5 seconds with no activity, show recovery options
+            setTimeout(function() {
+              if (!result.isSuccessful) {
+                spinnerElement.style.display = 'none';
+                messageElement.textContent = 'Authentication timed out or failed';
+                recoveryContainerElement.style.display = 'block';
+                redirectButtonElement.style.display = 'inline-block';
+              }
+            }, 5000);
+          }
+        }
+      }
+      
+      // Handle button clicks
+      redirectButtonElement.addEventListener('click', function() {
+        window.location.href = window.location.origin;
+      });
+      
+      closeButtonElement.addEventListener('click', function() {
+        try {
+          window.close();
+        } catch (e) {
+          // If we can't close the window, redirect to main app
+          window.location.href = window.location.origin;
         }
       });
       
-      // Attempt to self-close after authentication
-      try {
-        if (window.opener && !window.opener.closed) {
-          window.opener.postMessage('auth-complete', window.location.origin);
-          setTimeout(function() {
-            window.close();
-          }, 1000);
+      clearStorageButtonElement.addEventListener('click', function() {
+        // Clear all storage and redirect to login with recovery flag
+        try {
+          localStorage.clear();
+          sessionStorage.clear();
+          window.location.href = window.location.origin + '/login?recovery=true';
+        } catch (e) {
+          console.error('Error clearing storage:', e);
+          statusMessageElement.textContent = 'Failed to clear storage. Please try a different browser.';
         }
-      } catch (e) {
-        console.error('Error during auth window communication:', e);
-      }
+      });
+      
+      // Start handling the auth result
+      handleAuthResult();
     };
-  </script>
-</body>
-</html> 

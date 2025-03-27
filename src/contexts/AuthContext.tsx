@@ -1,10 +1,15 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
+import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
 import { 
   GoogleAuthProvider, 
-  signInWithPopup, 
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut as firebaseSignOut,
   onAuthStateChanged,
-  User as FirebaseUser
+  browserLocalPersistence,
+  browserSessionPersistence,
+  inMemoryPersistence,
+  Auth
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, onSnapshot, FirestoreError } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
@@ -32,6 +37,7 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [initialAuthCheckDone, setInitialAuthCheckDone] = useState(false);
   const navigate = useNavigate();
 
   const handleSignOut = useCallback(async () => {
@@ -44,6 +50,61 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [navigate]);
 
+  // Initialize auth - handle redirect results when app loads
+  useEffect(() => {
+    const checkRedirectResult = async () => {
+      try {
+        // Check if we have a redirect result
+        const result = await getRedirectResult(auth);
+        if (result) {
+          console.log('Signed in via redirect');
+          
+          // When we get a redirect result, we need to manually process the user data
+          // since the onAuthStateChanged listener might miss the transition
+          const firebaseUser = result.user;
+          if (firebaseUser) {
+            try {
+              // Check if user exists in Firestore
+              const userRef = doc(db, 'users', firebaseUser.uid);
+              const userDoc = await getDoc(userRef);
+              
+              if (userDoc.exists()) {
+                // Update user data with latest info from Google
+                const userData = userDoc.data() as User;
+                await updateDoc(userRef, {
+                  displayName: firebaseUser.displayName || userData.displayName,
+                  photoURL: firebaseUser.photoURL || userData.photoURL,
+                });
+              } else {
+                // Create new user
+                const newUser = {
+                  email: firebaseUser.email || '',
+                  displayName: firebaseUser.displayName || '',
+                  photoURL: firebaseUser.photoURL || '',
+                  role: 'user' as const,
+                  verified: false,
+                  answered: false,
+                };
+                
+                await setDoc(doc(db, 'users', firebaseUser.uid), newUser);
+              }
+            } catch (error) {
+              console.error('Error processing redirect user data:', error);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Redirect sign-in error:', error);
+      } finally {
+        // Mark initial auth check as done regardless of result
+        setInitialAuthCheckDone(true);
+      }
+    };
+    
+    checkRedirectResult();
+  }, []);
+
+  // Set up auth state listener
   useEffect(() => {
     let userDocUnsubscribe: (() => void) | null = null;
     
@@ -66,6 +127,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setUser({
               ...userData,
               uid: firebaseUser.uid,
+              displayName: firebaseUser.displayName || userData.displayName || '',
+              photoURL: firebaseUser.photoURL || userData.photoURL || '',
             });
             
             // Now set up real-time listener
@@ -82,18 +145,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                   setUser({
                     ...userData,
                     uid: firebaseUser.uid,
+                    displayName: firebaseUser.displayName || userData.displayName || '',
+                    photoURL: firebaseUser.photoURL || userData.photoURL || '',
                   });
                   
-                  // Update this section in the onSnapshot callback
-                  if (userData.verified === false) {
+                  // If user becomes unverified, sign them out
+                  if (userData.verified === false && wasVerifiedButNowUnverified) {
                     console.log("User unverified, redirecting to login");
-                    if (wasVerifiedButNowUnverified) {
-                      navigate('/login');
-                      handleSignOut();
-                    } else {
-                      // For new unverified users, stay on the page but update UI accordingly
-                      // You might want to show a verification pending message instead
-                    }
+                    navigate('/login');
+                    handleSignOut();
                   }
                 }
               }, 
@@ -109,8 +169,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               }
             );
             
-            // Only set loading to false after we've initialized the user state
-            setLoading(false);
           } else {
             // New user, create a record in Firestore
             const newUser = {
@@ -124,7 +182,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             
             await setDoc(doc(db, 'users', firebaseUser.uid), newUser);
             
-            // Set initial user state without waiting for listener
+            // Set initial user state
             setUser({
               ...newUser,
               uid: firebaseUser.uid,
@@ -139,6 +197,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                   setUser({
                     ...userData,
                     uid: firebaseUser.uid,
+                    displayName: firebaseUser.displayName || userData.displayName || '',
+                    photoURL: firebaseUser.photoURL || userData.photoURL || '',
                   });
                 } else {
                   setUser(null);
@@ -157,20 +217,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 }
               }
             );
-            
-            // Set loading to false after initializing new user
-            setLoading(false);
           }
         } catch (error) {
           console.error('Error getting user data:', error);
           setUser(null);
-          setLoading(false);
         }
       } else {
         // User signed out
         setUser(null);
-        setLoading(false);
       }
+      
+      // Set loading to false when auth state is determined
+      setLoading(false);
+    }, (error) => {
+      console.error('Auth state changed error:', error);
+      setLoading(false);
     });
   
     // Cleanup function for when component unmounts
@@ -183,102 +244,72 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [navigate, handleSignOut, user?.verified]);
 
   const signInWithGoogle = async (): Promise<void> => {
-    setLoading(true); // Set loading to true during sign-in process
+    setLoading(true);
     try {
-      // First, test browser compatibility
+      // Always use redirect auth for mobile devices
+      // This is more reliable across different mobile browsers
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
       const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
       
-      console.log(`Browser detection: Safari: ${isSafari}, iOS: ${isIOS}, Mobile: ${isMobile}`);
-      
-      // Test storage capabilities
-      try {
-        // Check if cookies are enabled
-        document.cookie = "testcookie=1";
-        const cookiesEnabled = document.cookie.indexOf("testcookie") !== -1;
-        if (!cookiesEnabled) {
-          throw new Error("Cookies are disabled");
-        }
-        
-        // Check localStorage
-        localStorage.setItem('auth-test-storage', '1');
-        localStorage.removeItem('auth-test-storage');
-        console.log("Storage access verified");
-      } catch (storageError) {
-        console.error("Storage error detected:", storageError);
-        throw new Error('Please enable cookies and website data in your browser settings. This is required for authentication.');
-      }
+      console.log(`Device detection: Mobile: ${isMobile}, Safari: ${isSafari}, iOS: ${isIOS}`);
       
       const provider = new GoogleAuthProvider();
       
-      // Add additional configuration for authentication
+      // Set up custom parameters
       provider.setCustomParameters({
-        // Force account selection even if user has only one account
+        // Always prompt user to select account
         prompt: 'select_account',
-        // Additional parameters to help with CORS
-        auth_type: 'rerequest',
-        include_granted_scopes: 'true'
+        // Request offline access for better token handling
+        access_type: 'offline'
       });
       
-      // For Safari and iOS, use a more reliable approach
-      if (isSafari || isIOS) {
-        console.log("Using Safari/iOS optimized authentication");
-        // Attempt popup first
-        try {
-          await signInWithPopup(auth, provider);
-        } catch (popupError: any) {
-          console.error("Safari/iOS popup error:", popupError);
-          throw new Error(
-            'Authentication failed. Safari may be blocking popups. ' +
-            'Please enable popups for this site or try a different browser.'
-          );
-        }
+      // Always use redirect auth for mobile devices or Safari
+      if (isMobile || isSafari || isIOS) {
+        console.log("Using redirect auth for mobile/Safari");
+        await signInWithRedirect(auth, provider);
+        // The redirect will navigate away, so loading state remains
       } else {
-        // Standard approach for other browsers
+        // Try popup for desktop, fall back to redirect if fails
+        console.log("Trying popup auth for desktop");
         try {
           await signInWithPopup(auth, provider);
         } catch (popupError: any) {
           console.error("Popup error:", popupError);
+          
           if (popupError.code === 'auth/popup-blocked' || 
-              popupError.code === 'auth/popup-closed-by-user') {
-            throw new Error('Authentication popup was blocked. Please enable popups for this site.');
+              popupError.code === 'auth/popup-closed-by-user' ||
+              popupError.code === 'auth/cancelled-popup-request') {
+            console.log("Popup blocked or closed, falling back to redirect");
+            await signInWithRedirect(auth, provider);
           } else {
             throw popupError;
           }
         }
       }
-      
-      // Navigation will happen via the useEffect watching the auth state
-      // Loading will be set to false by the auth state listener
     } catch (error: any) {
       console.error('Error signing in with Google:', error);
-      setLoading(false); // Reset loading state on error
+      setLoading(false);
       
-      // Provide better error messages to the user
+      // Provide detailed error messages
       let errorMessage = 'Authentication failed. Please try again.';
       
       if (error.message) {
         errorMessage = error.message;
       } else if (error.code === 'auth/network-request-failed') {
         errorMessage = 'Network error. Please check your internet connection.';
-      } else if (error.code === 'auth/popup-blocked') {
-        errorMessage = 'Authentication popup was blocked. Please enable popups for this site.';
-      } else if (error.code === 'auth/popup-closed-by-user') {
-        errorMessage = 'Authentication was canceled. Please try again.';
-      } else if (error.code === 'auth/user-disabled') {
-        errorMessage = 'This account has been disabled. Please contact support.';
       } else if (error.code === 'auth/web-storage-unsupported') {
-        errorMessage = 'Your browser does not support web storage. Please enable cookies.';
-      } else if (error.code === 'auth/cors-unsupported') {
-        errorMessage = 'Your browser is blocking cross-origin requests. Please try a different browser.';
+        errorMessage = 'Your browser does not support web storage. Please enable cookies or try a different browser.';
+      } else if (error.code === 'auth/operation-not-supported-in-this-environment') {
+        errorMessage = 'Authentication is not supported in this browser environment. Please try a different browser.';
       }
       
       throw new Error(errorMessage);
     }
   };
 
-  if (loading) {
+  // Show loading screen only when we're still checking auth status
+  if (loading && !initialAuthCheckDone) {
     return <LoadingScreen />;
   }
 
@@ -287,4 +318,4 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       {children}
     </AuthContext.Provider>
   );
-}; 
+};
