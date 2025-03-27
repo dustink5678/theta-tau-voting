@@ -59,6 +59,10 @@ fi
 print_step "Creating 404.html for SPA routing"
 cp dist/index.html dist/404.html
 
+# Set Firebase Storage CORS configuration
+print_step "Setting Firebase Storage CORS configuration"
+firebase storage:cors set cors.json
+
 # Deploy to Firebase
 print_step "Deploying the application to Firebase"
 firebase deploy --only hosting
