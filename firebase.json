@@ -1,4 +1,8 @@
 {
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
   "hosting": {
     "public": "dist",
     "ignore": [
@@ -39,15 +43,11 @@
           },
           {
             "key": "Access-Control-Allow-Headers",
-            "value": "Content-Type, Authorization"
+            "value": "Origin, X-Requested-With, Content-Type, Accept, Authorization"
           }
         ]
       }
     ]
-  },
-  "firestore": {
-    "rules": "firestore.rules",
-    "indexes": "firestore.indexes.json"
   },
   "database": {
     "rules": "database.rules.json"

@@ -185,48 +185,67 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const signInWithGoogle = async (): Promise<void> => {
     setLoading(true); // Set loading to true during sign-in process
     try {
-      // At the beginning of your signInWithGoogle function
-      if (/^((?!chrome|android).)*safari/i.test(navigator.userAgent)) {
-        // Safari-specific handling
-        try {
-          localStorage.setItem('test-storage-access', 'true');
-          localStorage.removeItem('test-storage-access');
-        } catch (storageError) {
-          // Handle storage access issues in Safari
-          throw new Error('Please enable cookies in Safari to allow authentication');
+      // First, test browser compatibility
+      const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      
+      console.log(`Browser detection: Safari: ${isSafari}, iOS: ${isIOS}, Mobile: ${isMobile}`);
+      
+      // Test storage capabilities
+      try {
+        // Check if cookies are enabled
+        document.cookie = "testcookie=1";
+        const cookiesEnabled = document.cookie.indexOf("testcookie") !== -1;
+        if (!cookiesEnabled) {
+          throw new Error("Cookies are disabled");
         }
+        
+        // Check localStorage
+        localStorage.setItem('auth-test-storage', '1');
+        localStorage.removeItem('auth-test-storage');
+        console.log("Storage access verified");
+      } catch (storageError) {
+        console.error("Storage error detected:", storageError);
+        throw new Error('Please enable cookies and website data in your browser settings. This is required for authentication.');
       }
       
       const provider = new GoogleAuthProvider();
       
-      // Add additional configuration to make sign-in more robust
+      // Add additional configuration for authentication
       provider.setCustomParameters({
         // Force account selection even if user has only one account
-        // This helps prevent some session issues
-        prompt: 'select_account'
+        prompt: 'select_account',
+        // Additional parameters to help with CORS
+        auth_type: 'rerequest',
+        include_granted_scopes: 'true'
       });
       
-      // Check if device is mobile
-      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-      
-      // For mobile, use redirect
-      if (isMobile) {
-        // We're not using redirect for now as it causes issues
-        // Just continue with popup and let it handle fallbacks
-        console.log('Mobile device detected, but still using popup for consistency');
-      }
-      
-      // For all devices, use popup with fallback handling
-      try {
-        await signInWithPopup(auth, provider);
-      } catch (popupError: any) {
-        console.log('Popup error:', popupError.code);
-        if (popupError.code === 'auth/popup-blocked' || 
-            popupError.code === 'auth/popup-closed-by-user') {
-          // Instead of redirect, just throw the error for better handling
-          throw popupError;
-        } else {
-          throw popupError;
+      // For Safari and iOS, use a more reliable approach
+      if (isSafari || isIOS) {
+        console.log("Using Safari/iOS optimized authentication");
+        // Attempt popup first
+        try {
+          await signInWithPopup(auth, provider);
+        } catch (popupError: any) {
+          console.error("Safari/iOS popup error:", popupError);
+          throw new Error(
+            'Authentication failed. Safari may be blocking popups. ' +
+            'Please enable popups for this site or try a different browser.'
+          );
+        }
+      } else {
+        // Standard approach for other browsers
+        try {
+          await signInWithPopup(auth, provider);
+        } catch (popupError: any) {
+          console.error("Popup error:", popupError);
+          if (popupError.code === 'auth/popup-blocked' || 
+              popupError.code === 'auth/popup-closed-by-user') {
+            throw new Error('Authentication popup was blocked. Please enable popups for this site.');
+          } else {
+            throw popupError;
+          }
         }
       }
       
@@ -239,18 +258,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       // Provide better error messages to the user
       let errorMessage = 'Authentication failed. Please try again.';
       
-      if (error.message && error.message.includes('cookies')) {
+      if (error.message) {
         errorMessage = error.message;
       } else if (error.code === 'auth/network-request-failed') {
         errorMessage = 'Network error. Please check your internet connection.';
       } else if (error.code === 'auth/popup-blocked') {
-        errorMessage = 'Popup was blocked. Please allow popups for this website.';
+        errorMessage = 'Authentication popup was blocked. Please enable popups for this site.';
       } else if (error.code === 'auth/popup-closed-by-user') {
-        errorMessage = 'Sign-in was cancelled. Please try again.';
+        errorMessage = 'Authentication was canceled. Please try again.';
       } else if (error.code === 'auth/user-disabled') {
         errorMessage = 'This account has been disabled. Please contact support.';
       } else if (error.code === 'auth/web-storage-unsupported') {
         errorMessage = 'Your browser does not support web storage. Please enable cookies.';
+      } else if (error.code === 'auth/cors-unsupported') {
+        errorMessage = 'Your browser is blocking cross-origin requests. Please try a different browser.';
       }
       
       throw new Error(errorMessage);
