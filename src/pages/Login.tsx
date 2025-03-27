@@ -240,6 +240,6 @@ const Login = () => {
       </Flex>
     </Box>
   );
-}
+};
 
 export default Login;
