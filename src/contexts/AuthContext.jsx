@@ -13,6 +13,7 @@ import {
   sendPasswordResetEmail
 } from 'firebase/auth';
 import { firebaseApp } from '../config/firebase';
+import { useAuth as importedUseAuth } from '../hooks/useAuth';
 
 // Create the context
 const AuthContext = createContext();
@@ -174,4 +175,7 @@ export function useAuthContext() {
     throw new Error('useAuthContext must be used within an AuthProvider');
   }
   return context;
-} 
+}
+
+// Re-export the useAuth hook from hooks/useAuth for backwards compatibility
+export const useAuth = importedUseAuth; 

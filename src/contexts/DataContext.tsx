@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import { collection, onSnapshot, Unsubscribe } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { User, Question } from '../types/index';
-import { useAuth } from './AuthContext';
+import { useAuthContext } from './AuthContext';
 
 interface DataContextType {
   users: User[];
@@ -27,7 +27,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
   const [isDataLoading, setIsDataLoading] = useState(true);
   const [isInitialLoadComplete, setIsInitialLoadComplete] = useState(false);
-  const { user } = useAuth();
+  const { currentUser: user } = useAuthContext();
 
   useEffect(() => {
     if (!user) return;
