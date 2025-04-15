@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import { collection, onSnapshot, Unsubscribe } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { User, Question } from '../types/index';
-import { useAuthContext } from './AuthContext';
+import { useAuthContext } from '../contexts/AuthContext';
 
 interface DataContextType {
   users: User[];
