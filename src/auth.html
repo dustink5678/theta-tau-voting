@@ -3,6 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cross-Origin-Opener-Policy" content="unsafe-none">
+  <meta http-equiv="Cross-Origin-Resource-Policy" content="cross-origin">
   <title>Authentication - Theta Tau Voting</title>
   <!-- Firebase App SDK -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -55,6 +57,20 @@
       font-size: 16px;
       margin-top: 20px;
     }
+    .retry-button {
+      margin-top: 20px;
+      padding: 8px 16px;
+      background-color: #c71827;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      display: none;
+    }
+    .retry-button:hover {
+      background-color: #a01320;
+    }
   </style>
 </head>
 <body>
@@ -63,12 +79,18 @@
     <p>Completing authentication... Please wait.</p>
     <div class="spinner"></div>
     <div id="statusMessage"></div>
+    <button id="retryButton" class="retry-button" onclick="window.location.href='/'">Return to Login</button>
   </div>
 
   <script>
     // Update status message to keep user informed
     function updateStatus(message) {
       document.getElementById('statusMessage').textContent = message;
+    }
+
+    // Show retry button
+    function showRetryButton() {
+      document.getElementById('retryButton').style.display = 'inline-block';
     }
 
     // Initialize Firebase with your project config
@@ -89,31 +111,58 @@
     window.addEventListener('DOMContentLoaded', () => {
       updateStatus("Processing authentication...");
       
+      // Set a timeout in case of hanging
+      const timeoutId = setTimeout(() => {
+        updateStatus("Authentication is taking longer than expected. You may need to reload the page.");
+        showRetryButton();
+      }, 10000);
+      
       firebase.auth().getRedirectResult()
         .then((result) => {
+          clearTimeout(timeoutId);
+          
           if (result.user) {
             updateStatus("Authentication successful! Redirecting...");
             // Successful login
             localStorage.setItem('authRedirectSuccess', 'true');
+            
+            // Redirect to the main app after a slight delay
+            setTimeout(() => {
+              window.location.href = '/';
+            }, 1500);
           } else {
-            updateStatus("No authentication result found.");
-            localStorage.setItem('authRedirectSuccess', 'false');
+            // Check if we're already logged in
+            const currentUser = firebase.auth().currentUser;
+            if (currentUser) {
+              updateStatus("Already logged in! Redirecting...");
+              localStorage.setItem('authRedirectSuccess', 'true');
+              
+              setTimeout(() => {
+                window.location.href = '/';
+              }, 1500);
+            } else {
+              updateStatus("No authentication result found. Returning to login...");
+              localStorage.setItem('authRedirectSuccess', 'false');
+              showRetryButton();
+              
+              // Redirect after longer delay
+              setTimeout(() => {
+                window.location.href = '/';
+              }, 3000);
+            }
           }
-          
-          // Redirect to the main app after a slight delay
-          setTimeout(() => {
-            window.location.href = '/';
-          }, 1500);
         })
         .catch((error) => {
+          clearTimeout(timeoutId);
           console.error("Authentication error:", error);
           updateStatus("Authentication error: " + error.message);
           localStorage.setItem('authError', error.message);
+          showRetryButton();
           
-          // Redirect to main app with error param
+          // Redirect to main app with error param after longer delay
           setTimeout(() => {
             window.location.href = '/?auth_error=' + encodeURIComponent(error.message);
-          }, 2000);
+          }, 3000);
         });
     });
   </script>

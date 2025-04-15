@@ -31,6 +31,35 @@
         ]
       },
       {
+        "source": "**/__/auth/**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "max-age=0"
+          },
+          {
+            "key": "Access-Control-Allow-Origin",
+            "value": "*"
+          },
+          {
+            "key": "Access-Control-Allow-Methods",
+            "value": "GET, POST, PUT, DELETE, OPTIONS"
+          },
+          {
+            "key": "Access-Control-Allow-Headers",
+            "value": "Origin, X-Requested-With, Content-Type, Accept, Authorization"
+          },
+          {
+            "key": "Cross-Origin-Opener-Policy",
+            "value": "unsafe-none"
+          },
+          {
+            "key": "Cross-Origin-Resource-Policy",
+            "value": "cross-origin"
+          }
+        ]
+      },
+      {
         "source": "**",
         "headers": [
           {
@@ -56,10 +85,6 @@
           {
             "key": "Cross-Origin-Resource-Policy",
             "value": "cross-origin"
-          },
-          {
-            "key": "Cross-Origin-Embedder-Policy",
-            "value": "credentialless"
           }
         ]
       }

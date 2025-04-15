@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { checkRedirectResult } from '../services/auth';
+import { checkRedirectResult, auth } from '../services/auth';
 import LoadingScreen from './LoadingScreen';
 import { useNavigate } from 'react-router-dom';
 
@@ -11,13 +11,21 @@ const AuthHandler = ({ children }) => {
   const navigate = useNavigate();
 
   useEffect(() => {
+    console.log('AuthHandler: Checking authentication state');
+    
+    // Set a timeout in case the check hangs
+    const timeoutId = setTimeout(() => {
+      console.log('AuthHandler: Authentication check timed out');
+      setChecking(false);
+    }, 5000);
+    
     const handleRedirect = async () => {
-      // Check if we're returning from a redirect authentication flow
+      // Check if we're returning from a redirect authentication flow via our auth.html page
       const redirectSuccess = localStorage.getItem('authRedirectSuccess') === 'true';
       const authError = localStorage.getItem('authError');
       
       if (redirectSuccess || authError) {
-        console.log('Returning from redirect authentication flow');
+        console.log('AuthHandler: Returning from redirect authentication flow');
         // Clear the status flags
         localStorage.removeItem('authRedirectSuccess');
         localStorage.removeItem('authError');
@@ -25,28 +33,34 @@ const AuthHandler = ({ children }) => {
         // Let the page know we've handled the redirect result
         window.sessionStorage.setItem('authRedirectHandled', 'true');
         setChecking(false);
+        clearTimeout(timeoutId);
         return;
       }
       
       // Check if we already processed this redirect
       if (window.sessionStorage.getItem('authRedirectHandled') === 'true') {
-        console.log('Redirect already handled in this session');
+        console.log('AuthHandler: Redirect already handled in this session');
         setChecking(false);
+        clearTimeout(timeoutId);
         return;
       }
       
       try {
         // Check for a redirect result from Firebase
+        console.log('AuthHandler: Checking for Firebase redirect result');
         const result = await checkRedirectResult();
         if (result) {
-          console.log('Processed redirect result successfully');
+          console.log('AuthHandler: Processed redirect result successfully');
           // Store in session storage that we've handled the redirect
           window.sessionStorage.setItem('authRedirectHandled', 'true');
+        } else {
+          console.log('AuthHandler: No redirect result found from Firebase');
         }
       } catch (err) {
-        console.error('Error processing redirect result:', err);
+        console.error('AuthHandler: Error processing redirect result:', err);
         setError(err.message);
       } finally {
+        clearTimeout(timeoutId);
         setChecking(false);
       }
     };
@@ -56,13 +70,19 @@ const AuthHandler = ({ children }) => {
     const urlError = urlParams.get('auth_error');
     
     if (urlError) {
-      console.error('Authentication error from URL:', urlError);
+      console.error('AuthHandler: Authentication error from URL:', urlError);
       setError(urlError);
       // Remove the query parameter
       navigate(window.location.pathname, { replace: true });
+      setChecking(false);
+      clearTimeout(timeoutId);
+    } else {
+      handleRedirect();
     }
     
-    handleRedirect();
+    return () => {
+      clearTimeout(timeoutId);
+    };
   }, [navigate]);
 
   // While checking for redirect result, show loading screen
