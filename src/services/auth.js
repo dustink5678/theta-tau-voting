@@ -13,14 +13,15 @@ import {
   sendPasswordResetEmail,
   browserPopupRedirectResolver,
   browserLocalPersistence,
-  setPersistence
+  setPersistence,
+  getRedirectResult
 } from 'firebase/auth';
 import { firebaseApp } from '../config/firebase';
 
 // Initialize Firebase auth service
 const auth = getAuth(firebaseApp);
 
-// Get the current origin for redirect
+// Set base URL for redirects
 const origin = window.location.origin;
 const redirectUrl = `${origin}/auth`;
 
@@ -29,37 +30,77 @@ setPersistence(auth, browserLocalPersistence).catch(err => {
   console.error("Error setting persistence:", err);
 });
 
-// Modified Google sign-in with fallback strategy
+// Check for redirect result on page load
+export const checkRedirectResult = async () => {
+  try {
+    const result = await getRedirectResult(auth);
+    if (result) {
+      console.log('Redirect result processed successfully');
+      return result.user;
+    }
+    return null;
+  } catch (error) {
+    console.error('Error processing redirect result:', error);
+    throw error;
+  }
+};
+
+// Modified Google sign-in with optimal strategy based on browser capabilities
 export const signInWithGoogle = async () => {
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ 
     prompt: 'select_account',
-    // Additional params to improve compatibility
     access_type: 'offline',
     include_granted_scopes: 'true'
   });
   
+  // Check if redirect mode was previously activated
+  const redirectMode = localStorage.getItem('useRedirectMode') === 'true';
+  
+  // If we previously used redirect mode successfully, stick with it
+  if (redirectMode) {
+    console.log('Using redirect authentication (previous success)');
+    return signInWithRedirect(auth, provider);
+  }
+
   try {
-    // Try popup auth first with special resolver to avoid COOP issues
-    return await signInWithPopup(auth, provider, browserPopupRedirectResolver);
+    // First try popup
+    console.log('Attempting popup authentication');
+    const result = await signInWithPopup(auth, provider, browserPopupRedirectResolver);
+    localStorage.setItem('useRedirectMode', 'false');
+    return result;
   } catch (error) {
     console.warn("Popup auth failed, falling back to redirect:", error);
-    // If popup fails, fall back to redirect method with custom redirect URL
-    auth.tenantId = null; // Clear any tenant ID to ensure clean redirect
+    // Store that we're using redirect mode for next time
+    localStorage.setItem('useRedirectMode', 'true');
+    // Clear any tenant ID to ensure clean redirect
+    auth.tenantId = null;
     return signInWithRedirect(auth, provider);
   }
 };
 
-// Modified Apple sign-in with the same fallback approach
+// Modified Apple sign-in with the same approach
 export const signInWithApple = async () => {
   const provider = new OAuthProvider('apple.com');
   provider.addScope('email');
   provider.addScope('name');
   
+  const redirectMode = localStorage.getItem('useRedirectMode') === 'true';
+  
+  if (redirectMode) {
+    console.log('Using redirect authentication (previous success)');
+    return signInWithRedirect(auth, provider);
+  }
+  
   try {
-    return await signInWithPopup(auth, provider, browserPopupRedirectResolver);
+    console.log('Attempting popup authentication');
+    const result = await signInWithPopup(auth, provider, browserPopupRedirectResolver);
+    localStorage.setItem('useRedirectMode', 'false');
+    return result;
   } catch (error) {
     console.warn("Popup auth failed, falling back to redirect:", error);
+    localStorage.setItem('useRedirectMode', 'true');
+    auth.tenantId = null;
     return signInWithRedirect(auth, provider);
   }
 };
@@ -88,6 +129,7 @@ export const updateUserPassword = async (user, newPassword) => {
 
 // Session management
 export const logOut = async () => {
+  localStorage.removeItem('useRedirectMode');
   return signOut(auth);
 };
 
