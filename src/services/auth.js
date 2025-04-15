@@ -10,25 +10,58 @@ import {
   onAuthStateChanged,
   updateEmail,
   updatePassword,
-  sendPasswordResetEmail
+  sendPasswordResetEmail,
+  browserPopupRedirectResolver,
+  browserLocalPersistence,
+  setPersistence
 } from 'firebase/auth';
 import { firebaseApp } from '../config/firebase';
 
 // Initialize Firebase auth service
 const auth = getAuth(firebaseApp);
 
-// Use popup method for OAuth providers to avoid third-party cookie issues
+// Get the current origin for redirect
+const origin = window.location.origin;
+const redirectUrl = `${origin}/auth`;
+
+// Configure auth persistence to avoid cookie issues
+setPersistence(auth, browserLocalPersistence).catch(err => {
+  console.error("Error setting persistence:", err);
+});
+
+// Modified Google sign-in with fallback strategy
 export const signInWithGoogle = async () => {
   const provider = new GoogleAuthProvider();
-  provider.setCustomParameters({ prompt: 'select_account' });
-  return signInWithPopup(auth, provider);
+  provider.setCustomParameters({ 
+    prompt: 'select_account',
+    // Additional params to improve compatibility
+    access_type: 'offline',
+    include_granted_scopes: 'true'
+  });
+  
+  try {
+    // Try popup auth first with special resolver to avoid COOP issues
+    return await signInWithPopup(auth, provider, browserPopupRedirectResolver);
+  } catch (error) {
+    console.warn("Popup auth failed, falling back to redirect:", error);
+    // If popup fails, fall back to redirect method with custom redirect URL
+    auth.tenantId = null; // Clear any tenant ID to ensure clean redirect
+    return signInWithRedirect(auth, provider);
+  }
 };
 
+// Modified Apple sign-in with the same fallback approach
 export const signInWithApple = async () => {
   const provider = new OAuthProvider('apple.com');
   provider.addScope('email');
   provider.addScope('name');
-  return signInWithPopup(auth, provider);
+  
+  try {
+    return await signInWithPopup(auth, provider, browserPopupRedirectResolver);
+  } catch (error) {
+    console.warn("Popup auth failed, falling back to redirect:", error);
+    return signInWithRedirect(auth, provider);
+  }
 };
 
 // Email authentication methods

@@ -1,70 +1,40 @@
 #!/bin/bash
 
-# Colors for better output
+# ANSI color codes
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
+RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-# Function to print step messages
-print_step() {
-  echo -e "${YELLOW}==>${NC} $1"
+# Function to handle errors
+handle_error() {
+  echo -e "${RED}$1${NC}"
+  exit 1
 }
 
-# Add all files to git
-print_step "Adding all files to git"
-git add .
+# Git commit and push
+echo "==> Adding all files to git"
+git add . || handle_error "Git add failed"
 
-# Get commit message
-echo -e "${YELLOW}Enter commit message:${NC}"
+echo "Enter commit message:"
 read commit_message
 
-# Commit with the entered message
-if [ -n "$commit_message" ]; then
-  print_step "Committing with message: '$commit_message'"
-  git commit -m "$commit_message"
-else
-  print_step "No commit message provided, using default message"
-  git commit -m "Update application"
-fi
+echo "==> Committing with message: '$commit_message'"
+git commit -m "$commit_message" || handle_error "Git commit failed"
 
-# Push to remote repository
-print_step "Pushing to remote repository"
-git push
+echo "==> Pushing to remote repository"
+git push || handle_error "Git push failed"
 
-# Check if push was successful
-if [ $? -eq 0 ]; then
-  print_step "Git push successful"
-else
-  echo -e "${YELLOW}Git push failed. Do you want to continue with build and deploy? (y/n)${NC}"
-  read continue_choice
-  if [[ ! $continue_choice =~ ^[Yy]$ ]]; then
-    echo "Exiting script"
-    exit 1
-  fi
-fi
+echo "==> Git push successful"
 
-# Run build
-print_step "Building the application"
-npm run build
+# Build the application
+echo "==> Building the application"
+./build.sh || handle_error "Build failed. Cannot proceed with deployment."
 
-# Check if build was successful
-if [ $? -eq 0 ]; then
-  print_step "Build successful"
-else
-  echo -e "${YELLOW}Build failed. Cannot proceed with deployment.${NC}"
-  exit 1
-fi
+echo "==> Build successful"
 
-# Run Firebase deploy
-print_step "Deploying the application to Firebase"
-firebase deploy
+# Deploy to Firebase
+echo "==> Deploying the application to Firebase"
+firebase deploy || handle_error "Firebase deployment failed."
 
-# Check if deployment was successful
-if [ $? -eq 0 ]; then
-  echo -e "${GREEN}Firebase deployment successful!${NC}"
-else
-  echo -e "${YELLOW}Firebase deployment failed.${NC}"
-  exit 1
-fi
-
+echo -e "${GREEN}Firebase deployment successful!${NC}"
 echo -e "${GREEN}All tasks completed successfully!${NC}"
