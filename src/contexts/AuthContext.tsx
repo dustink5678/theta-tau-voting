@@ -246,8 +246,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const signInWithGoogle = async (): Promise<void> => {
     setLoading(true);
     try {
-      // Always use redirect auth for mobile devices
-      // This is more reliable across different mobile browsers
+      // Check device and browser info for logging purposes only
       const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
       const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
@@ -264,29 +263,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         access_type: 'offline'
       });
       
-      // Always use redirect auth for mobile devices or Safari
-      if (isMobile || isSafari || isIOS) {
-        console.log("Using redirect auth for mobile/Safari");
-        await signInWithRedirect(auth, provider);
-        // The redirect will navigate away, so loading state remains
-      } else {
-        // Try popup for desktop, fall back to redirect if fails
-        console.log("Trying popup auth for desktop");
-        try {
-          await signInWithPopup(auth, provider);
-        } catch (popupError: any) {
-          console.error("Popup error:", popupError);
-          
-          if (popupError.code === 'auth/popup-blocked' || 
-              popupError.code === 'auth/popup-closed-by-user' ||
-              popupError.code === 'auth/cancelled-popup-request') {
-            console.log("Popup blocked or closed, falling back to redirect");
-            await signInWithRedirect(auth, provider);
-          } else {
-            throw popupError;
-          }
-        }
-      }
+      // ALWAYS use redirect auth to avoid COOP issues
+      // This is what you wanted - to have the app continue in the new page after auth
+      console.log("Using redirect auth for all devices");
+      await signInWithRedirect(auth, provider);
+      
+      // The redirect will navigate away, so this code won't execute
+      // until the user comes back to the site, and that will be handled 
+      // by the getRedirectResult call in the useEffect
     } catch (error: any) {
       console.error('Error signing in with Google:', error);
       setLoading(false);
