@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import * as authService from '../services/auth';
+import { db } from '../config/firebase';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 // Create the context
 const AuthContext = createContext(null);
@@ -19,10 +21,68 @@ export function AuthProvider({ children }) {
     throw err;
   };
 
+  // Get user data from Firestore
+  const getUserData = async (user) => {
+    if (!user) return null;
+    
+    try {
+      console.log("Getting user data for:", user.uid);
+      const userRef = doc(db, 'users', user.uid);
+      const userDoc = await getDoc(userRef);
+      
+      if (userDoc.exists()) {
+        console.log("User document exists:", userDoc.data());
+        // Return a combination of Firebase auth user and Firestore data
+        return {
+          ...user,
+          ...userDoc.data(),
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName || userDoc.data().name || 'User'
+        };
+      } else {
+        console.log("Creating new user document");
+        // Create a new user document
+        const newUser = {
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName || 'User',
+          verified: false,
+          answered: false,
+          role: 'user',
+          createdAt: new Date().toISOString()
+        };
+        
+        await setDoc(userRef, newUser);
+        return newUser;
+      }
+    } catch (err) {
+      console.error("Error getting user data:", err);
+      return {
+        ...user,
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName || 'User',
+        role: 'user',
+        verified: false,
+        answered: false
+      };
+    }
+  };
+
   // Listen for auth state changes
   useEffect(() => {
-    const unsubscribe = authService.subscribeToAuthChanges((user) => {
-      setCurrentUser(user);
+    console.log("Setting up auth state listener");
+    const unsubscribe = authService.subscribeToAuthChanges(async (firebaseUser) => {
+      if (firebaseUser) {
+        console.log("Auth state changed - user signed in:", firebaseUser.uid);
+        // Get user data from Firestore
+        const userData = await getUserData(firebaseUser);
+        setCurrentUser(userData);
+      } else {
+        console.log("Auth state changed - user signed out");
+        setCurrentUser(null);
+      }
       setLoading(false);
     });
 
@@ -138,6 +198,7 @@ export function AuthProvider({ children }) {
   // Create value object with all auth state and methods
   const value = {
     currentUser,
+    user: currentUser,
     loading,
     error,
     registerWithEmail,
