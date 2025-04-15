@@ -137,6 +137,7 @@ export function useAuth() {
     registerWithEmail,
     loginWithEmail,
     loginWithGoogle,
+    signInWithGoogle: loginWithGoogle,
     loginWithApple,
     resetPassword,
     logout
