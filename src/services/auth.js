@@ -17,18 +17,18 @@ import { firebaseApp } from '../config/firebase';
 // Initialize Firebase auth service
 const auth = getAuth(firebaseApp);
 
-// Use redirect method for OAuth providers (better for mobile/cross-platform)
+// Use popup method for OAuth providers to avoid third-party cookie issues
 export const signInWithGoogle = async () => {
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
-  return signInWithRedirect(auth, provider);
+  return signInWithPopup(auth, provider);
 };
 
 export const signInWithApple = async () => {
   const provider = new OAuthProvider('apple.com');
   provider.addScope('email');
   provider.addScope('name');
-  return signInWithRedirect(auth, provider);
+  return signInWithPopup(auth, provider);
 };
 
 // Email authentication methods

@@ -1,40 +1,43 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { 
-  getAuth, 
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  signInWithPopup,
-  GoogleAuthProvider,
-  OAuthProvider,
-  signOut as firebaseSignOut,
-  onAuthStateChanged,
-  updateEmail,
-  updatePassword,
-  sendPasswordResetEmail
-} from 'firebase/auth';
-import { firebaseApp } from '../config/firebase';
-import { useAuth as importedUseAuth } from '../hooks/useAuth';
+import * as authService from '../services/auth';
 
 // Create the context
-const AuthContext = createContext();
+const AuthContext = createContext(null);
 
-// Create the provider component
+/**
+ * AuthProvider component that provides authentication state and methods to all children
+ */
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const auth = getAuth(firebaseApp);
-  
+
+  // Handle errors consistently
+  const handleError = (err) => {
+    console.error('Auth error:', err);
+    setError(err);
+    throw err;
+  };
+
+  // Listen for auth state changes
+  useEffect(() => {
+    const unsubscribe = authService.subscribeToAuthChanges((user) => {
+      setCurrentUser(user);
+      setLoading(false);
+    });
+
+    return unsubscribe;
+  }, []);
+
   // Register with email and password
   const registerWithEmail = async (email, password) => {
     setLoading(true);
     setError(null);
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const userCredential = await authService.registerWithEmail(email, password);
       return userCredential.user;
     } catch (err) {
-      setError(err);
-      throw err;
+      return handleError(err);
     } finally {
       setLoading(false);
     }
@@ -45,11 +48,10 @@ export function AuthProvider({ children }) {
     setLoading(true);
     setError(null);
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const userCredential = await authService.loginWithEmail(email, password);
       return userCredential.user;
     } catch (err) {
-      setError(err);
-      throw err;
+      return handleError(err);
     } finally {
       setLoading(false);
     }
@@ -59,13 +61,13 @@ export function AuthProvider({ children }) {
   const loginWithGoogle = async () => {
     setLoading(true);
     setError(null);
-    const provider = new GoogleAuthProvider();
     try {
-      const result = await signInWithPopup(auth, provider);
+      const result = await authService.signInWithGoogle();
+      // With popup flow, we get the user result directly
       return result.user;
     } catch (err) {
-      setError(err);
-      throw err;
+      setLoading(false);
+      return handleError(err);
     } finally {
       setLoading(false);
     }
@@ -75,13 +77,13 @@ export function AuthProvider({ children }) {
   const loginWithApple = async () => {
     setLoading(true);
     setError(null);
-    const provider = new OAuthProvider('apple.com');
     try {
-      const result = await signInWithPopup(auth, provider);
+      const result = await authService.signInWithApple();
+      // With popup flow, we get the user result directly
       return result.user;
     } catch (err) {
-      setError(err);
-      throw err;
+      setLoading(false);
+      return handleError(err);
     } finally {
       setLoading(false);
     }
@@ -91,10 +93,9 @@ export function AuthProvider({ children }) {
   const signOut = async () => {
     setError(null);
     try {
-      await firebaseSignOut(auth);
+      await authService.logOut();
     } catch (err) {
-      setError(err);
-      throw err;
+      return handleError(err);
     }
   };
 
@@ -105,10 +106,9 @@ export function AuthProvider({ children }) {
       if (!currentUser) {
         throw new Error('No user is currently logged in');
       }
-      await updateEmail(currentUser, newEmail);
+      await authService.updateUserEmail(currentUser, newEmail);
     } catch (err) {
-      setError(err);
-      throw err;
+      return handleError(err);
     }
   };
 
@@ -119,10 +119,9 @@ export function AuthProvider({ children }) {
       if (!currentUser) {
         throw new Error('No user is currently logged in');
       }
-      await updatePassword(currentUser, newPassword);
+      await authService.updateUserPassword(currentUser, newPassword);
     } catch (err) {
-      setError(err);
-      throw err;
+      return handleError(err);
     }
   };
 
@@ -130,23 +129,13 @@ export function AuthProvider({ children }) {
   const resetPassword = async (email) => {
     setError(null);
     try {
-      await sendPasswordResetEmail(auth, email);
+      await authService.resetPassword(email);
     } catch (err) {
-      setError(err);
-      throw err;
+      return handleError(err);
     }
   };
 
-  // Listen for auth state changes
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setCurrentUser(user);
-      setLoading(false);
-    });
-
-    return unsubscribe;
-  }, [auth]);
-
+  // Create value object with all auth state and methods
   const value = {
     currentUser,
     loading,
@@ -158,7 +147,9 @@ export function AuthProvider({ children }) {
     signOut,
     updateUserEmail,
     updateUserPassword,
-    resetPassword
+    resetPassword,
+    // Aliases for compatibility
+    signInWithGoogle: loginWithGoogle
   };
 
   return (
@@ -168,14 +159,16 @@ export function AuthProvider({ children }) {
   );
 }
 
-// Create a custom hook to use the auth context
-export function useAuthContext() {
+/**
+ * Custom hook to use the auth context
+ */
+export function useAuth() {
   const context = useContext(AuthContext);
   if (context === null) {
-    throw new Error('useAuthContext must be used within an AuthProvider');
+    throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
 }
 
-// Re-export the useAuth hook from hooks/useAuth for backwards compatibility
-export const useAuth = importedUseAuth; 
+// For backwards compatibility
+export const useAuthContext = useAuth; 
