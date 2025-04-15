@@ -12,7 +12,7 @@ import {
   updatePassword,
   sendPasswordResetEmail
 } from 'firebase/auth';
-import { firebaseApp } from '../firebase/config';
+import { firebaseApp } from '../config/firebase';
 
 // Create the context
 const AuthContext = createContext();
