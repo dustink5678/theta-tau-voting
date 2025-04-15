@@ -18,19 +18,6 @@
     ],
     "headers": [
       {
-        "source": "service-worker.js",
-        "headers": [
-          {
-            "key": "Content-Type",
-            "value": "application/javascript"
-          },
-          {
-            "key": "Cache-Control",
-            "value": "no-cache, no-store, must-revalidate"
-          }
-        ]
-      },
-      {
         "source": "**/*.@(js|css|html)",
         "headers": [
           {
@@ -63,8 +50,8 @@
             "value": "same-origin-allow-popups"
           },
           {
-            "key": "Cross-Origin-Embedder-Policy",
-            "value": "credentialless"
+            "key": "Cross-Origin-Resource-Policy",
+            "value": "cross-origin"
           }
         ]
       }

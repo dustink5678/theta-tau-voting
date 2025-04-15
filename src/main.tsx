@@ -3,19 +3,13 @@ import ReactDOM from 'react-dom/client'
 import App from './App.tsx'
 import './index.css'
 
-// Register the service worker with simplified registration
+// Completely disable and unregister any service workers
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    // Add a timestamp to the URL to avoid caching issues
-    const swUrl = `/service-worker.js?v=${new Date().getTime()}`;
-    
-    navigator.serviceWorker.register(swUrl)
-      .then(registration => {
-        console.log('Service Worker registered successfully:', registration.scope);
-      })
-      .catch(error => {
-        console.error('Service Worker registration failed:', error);
-      });
+  navigator.serviceWorker.getRegistrations().then(registrations => {
+    for (let registration of registrations) {
+      console.log('Unregistering service worker to prevent authentication issues');
+      registration.unregister();
+    }
   });
 }
 
