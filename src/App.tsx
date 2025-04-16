@@ -41,7 +41,7 @@ const theme = extendTheme({
 });
 
 const PrivateRoute = ({ children, adminOnly = false }: { children: React.ReactNode; adminOnly?: boolean }) => {
-  const { user, loading } = useAuth();
+  const { user, loading } = useAuth() as any;
   
   if (loading) {
     return <LoadingScreen />;
@@ -69,7 +69,7 @@ const PrivateRoute = ({ children, adminOnly = false }: { children: React.ReactNo
 };
 
 const PublicRoute = ({ children }: { children: React.ReactNode }) => {
-  const { user, loading } = useAuth();
+  const { user, loading } = useAuth() as any;
   
   if (loading) {
     return <LoadingScreen />;
@@ -91,7 +91,7 @@ const PublicRoute = ({ children }: { children: React.ReactNode }) => {
 
 // MODIFY THIS COMPONENT:
 const AppContent = () => {
-  const { user, loading } = useAuth();
+  const { user, loading } = useAuth() as any;
   
   // Show loading screen while determining authentication state
   if (loading) {
