@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import * as authService from '../services/auth';
 import { db } from '../config/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { signInWithGoogle, signInWithApple, resetUserCache } from '../services/auth';
+import { signInWithGoogle, signInWithApple, signInWithMicrosoft, resetUserCache } from '../services/auth';
 
 // Create the context
 const AuthContext = createContext(null);
@@ -150,6 +150,22 @@ export function AuthProvider({ children }) {
     }
   };
 
+  // Microsoft sign-in
+  const loginWithMicrosoft = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await signInWithMicrosoft();
+      await getUserData(result.user);
+      setLoading(false);
+      return result;
+    } catch (err) {
+      setError(err.message);
+      setLoading(false);
+      throw err;
+    }
+  };
+
   // Sign out
   const signOut = async () => {
     setError(null);
@@ -205,6 +221,7 @@ export function AuthProvider({ children }) {
     registerWithEmail,
     loginWithEmail,
     loginWithGoogle,
+    loginWithMicrosoft,
     loginWithApple,
     signOut,
     updateUserEmail,
@@ -212,7 +229,8 @@ export function AuthProvider({ children }) {
     resetPassword,
     resetUserCache,
     // Aliases for compatibility
-    signInWithGoogle: loginWithGoogle
+    signInWithGoogle: loginWithGoogle,
+    signInWithMicrosoft: loginWithMicrosoft,
   };
 
   return (

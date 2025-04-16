@@ -17,13 +17,15 @@ import {
   CloseButton,
 } from '@chakra-ui/react';
 import { FcGoogle } from 'react-icons/fc';
+import { FaMicrosoft } from 'react-icons/fa';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import thetaTauLogo from '../assets/logo.png';
 
 const Login = () => {
-  const { signInWithGoogle, user } = useAuth();
+  const { signInWithGoogle, loginWithMicrosoft, resetUserCache, signOut, user } = useAuth() as any;
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingProvider, setLoadingProvider] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const toast = useToast();
   const navigate = useNavigate();
@@ -31,15 +33,13 @@ const Login = () => {
   // Effect for checking existing user and redirect
   useEffect(() => {
     if (user) {
-      console.log("Login page detected user:", user);
-      
-      // Redirect based on role and verification status
+      // @ts-ignore
       if (user.role === 'admin') {
         navigate('/admin');
+      // @ts-ignore
       } else if (user.verified) {
         navigate('/dashboard');
       } else {
-        // User is logged in but not verified
         toast({
           title: 'Account pending verification',
           description: 'Your account requires verification by an administrator.',
@@ -54,40 +54,75 @@ const Login = () => {
   // Handle Google sign-in button click
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
+    setLoadingProvider('google');
     setErrorMessage(null);
-    
     try {
-      // This will redirect to Google, so the page will unload
       await signInWithGoogle();
     } catch (error: any) {
-      console.error('Error starting Google sign-in:', error);
-      
-      // Handle the error and show appropriate message
-      let errorMsg = 'Authentication failed. Please try again.';
-      
-      // Provide helpful error messages for common issues
-      if (error.code === 'auth/network-request-failed') {
-        errorMsg = 'Network error. This may be caused by content blockers or privacy settings. Try disabling ad blockers or using incognito mode.';
-      } else if (error.code === 'auth/web-storage-unsupported' || error.code === 'auth/storage-unavailable') {
-        errorMsg = 'Your browser has disabled cookies or storage. Please enable them for this site or try a different browser.';
-      } else if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user') {
-        errorMsg = 'Authentication popup was blocked or closed. Please allow popups for this site.';
-      } else if (error.message) {
-        errorMsg = error.message;
-      }
-      
-      // Show error in both the UI and a toast
-      setErrorMessage(errorMsg);
+      handleAuthError(error, 'Google');
+    } finally {
+      setIsLoading(false);
+      setLoadingProvider(null);
+    }
+  };
+
+  // Handle Microsoft sign-in button click
+  const handleMicrosoftSignIn = async () => {
+    setIsLoading(true);
+    setLoadingProvider('microsoft');
+    setErrorMessage(null);
+    try {
+      await loginWithMicrosoft();
+    } catch (error: any) {
+      handleAuthError(error, 'Microsoft');
+    } finally {
+      setIsLoading(false);
+      setLoadingProvider(null);
+    }
+  };
+
+  // Handle Reset Session button click
+  const handleResetSession = async () => {
+    setIsLoading(true);
+    setErrorMessage(null);
+    try {
+      resetUserCache();
+      await signOut();
       toast({
-        title: 'Authentication Error',
-        description: errorMsg,
-        status: 'error',
-        duration: 7000,
+        title: 'Session Reset',
+        description: 'Your session and cache have been cleared. Please try signing in again.',
+        status: 'success',
+        duration: 5000,
         isClosable: true,
       });
-      
+    } catch (error: any) {
+      setErrorMessage('Failed to reset session. Please reload the page.');
+    } finally {
       setIsLoading(false);
     }
+  };
+
+  // Helper for error handling
+  const handleAuthError = (error: any, provider: string) => {
+    console.error(`Error starting ${provider} sign-in:`, error);
+    let errorMsg = `${provider} authentication failed. Please try again.`;
+    if (error.code === 'auth/network-request-failed') {
+      errorMsg = 'Network error. This may be caused by content blockers or privacy settings. Try disabling ad blockers or using incognito mode.';
+    } else if (error.code === 'auth/web-storage-unsupported' || error.code === 'auth/storage-unavailable') {
+      errorMsg = 'Your browser has disabled cookies or storage. Please enable them for this site or try a different browser.';
+    } else if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user') {
+      errorMsg = 'Authentication popup was blocked or closed. Please allow popups for this site.';
+    } else if (error.message) {
+      errorMsg = error.message;
+    }
+    setErrorMessage(errorMsg);
+    toast({
+      title: `${provider} Authentication Error`,
+      description: errorMsg,
+      status: 'error',
+      duration: 7000,
+      isClosable: true,
+    });
   };
 
   // Show loading spinner if authentication is in progress
@@ -103,7 +138,11 @@ const Login = () => {
         <Center>
           <VStack spacing={4}>
             <Spinner size="xl" color="blue.500" thickness="4px" />
-            <Text>Connecting to Google, please wait...</Text>
+            <Text>
+              {loadingProvider === 'google' && 'Connecting to Google, please wait...'}
+              {loadingProvider === 'microsoft' && 'Connecting to Microsoft, please wait...'}
+              {!loadingProvider && 'Processing, please wait...'}
+            </Text>
           </VStack>
         </Center>
       </Box>
@@ -138,7 +177,7 @@ const Login = () => {
         />
         <Heading mb={6} textAlign="center">Theta Tau Voting System</Heading>
         <Text mb={8} textAlign="center" color="gray.600">
-          Sign in with your Google account to participate in chapter voting
+          Sign in with your Google or Microsoft account to participate in chapter voting
         </Text>
         
         {errorMessage && (
@@ -159,18 +198,44 @@ const Login = () => {
           </Alert>
         )}
         
-        <Button
-          size="lg"
-          colorScheme="blue"
-          onClick={handleGoogleSignIn}
-          width="100%"
-          leftIcon={<FcGoogle size={20} />}
-        >
-          Sign in with Google
-        </Button>
+        <VStack spacing={4} width="100%">
+          <Button
+            size="lg"
+            colorScheme="blue"
+            onClick={handleGoogleSignIn}
+            width="100%"
+            leftIcon={<FcGoogle size={20} />}
+            isLoading={isLoading && loadingProvider === 'google'}
+          >
+            Sign in with Google
+          </Button>
+          <Button
+            size="lg"
+            colorScheme="purple"
+            onClick={handleMicrosoftSignIn}
+            width="100%"
+            leftIcon={<FaMicrosoft size={20} />}
+            isLoading={isLoading && loadingProvider === 'microsoft'}
+          >
+            Sign in with Microsoft
+          </Button>
+          <Button
+            size="md"
+            variant="outline"
+            colorScheme="gray"
+            onClick={handleResetSession}
+            width="100%"
+            isLoading={isLoading && !loadingProvider}
+          >
+            Reset Session / Clear Cache
+          </Button>
+        </VStack>
         
         <Text mt={6} fontSize="sm" color="gray.500" textAlign="center">
-          This site works best in Chrome, Firefox, Edge, or Safari with cookies and JavaScript enabled.
+          This site works best in Chrome, Firefox, Edge, or Safari with cookies and JavaScript enabled.<br />
+          {/*
+            COOP warning: You may see a 'Cross-Origin-Opener-Policy policy would block the window.close call.' warning in the console after sign-in. This is expected with modern browser security and Firebase popups, and does not affect functionality.
+          */}
         </Text>
       </Flex>
     </Box>
