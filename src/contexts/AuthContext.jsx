@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import * as authService from '../services/auth';
 import { db } from '../config/firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { signInWithGoogle, signInWithApple, resetUserCache } from '../services/auth';
 
 // Create the context
@@ -71,23 +71,37 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Listen for auth state changes
+  // Replace the useEffect for auth state changes with a real-time Firestore listener
   useEffect(() => {
-    console.log("Setting up auth state listener");
-    const unsubscribe = authService.subscribeToAuthChanges(async (firebaseUser) => {
+    let unsubscribeUserDoc = null;
+    const unsubscribeAuth = authService.subscribeToAuthChanges(async (firebaseUser) => {
       if (firebaseUser) {
-        console.log("Auth state changed - user signed in:", firebaseUser.uid);
-        // Get user data from Firestore
-        const userData = await getUserData(firebaseUser);
-        setCurrentUser(userData);
+        // Listen to changes on the user's Firestore document
+        const userRef = doc(db, 'users', firebaseUser.uid);
+        unsubscribeUserDoc = onSnapshot(userRef, (userDoc) => {
+          if (userDoc.exists()) {
+            setCurrentUser({
+              ...firebaseUser,
+              ...userDoc.data(),
+              uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              displayName: firebaseUser.displayName || userDoc.data().name || 'User'
+            });
+          } else {
+            setCurrentUser(null);
+          }
+          setLoading(false);
+        });
       } else {
-        console.log("Auth state changed - user signed out");
         setCurrentUser(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
 
-    return unsubscribe;
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeUserDoc) unsubscribeUserDoc();
+    };
   }, []);
 
   // Register with email and password
