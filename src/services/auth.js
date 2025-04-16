@@ -116,32 +116,6 @@ export const signInWithApple = async () => {
   }
 };
 
-// Microsoft sign-in with robust error handling
-export const signInWithMicrosoft = async () => {
-  const provider = new OAuthProvider('microsoft.com');
-  provider.setCustomParameters({
-    prompt: 'select_account',
-  });
-  try {
-    const result = await signInWithPopup(auth, provider, browserPopupRedirectResolver);
-    localStorage.setItem('useRedirectMode', 'false');
-    return result;
-  } catch (error) {
-    if (
-      error.code === 'auth/network-request-failed' ||
-      error.code === 'auth/web-storage-unsupported' ||
-      error.code === 'auth/storage-unavailable' ||
-      error.code === 'auth/cookie-not-set' ||
-      error.code === 'auth/operation-not-allowed'
-    ) {
-      resetUserCache();
-      await signOut(auth);
-    }
-    localStorage.removeItem('useRedirectMode');
-    throw error;
-  }
-};
-
 // Email authentication methods
 export const registerWithEmail = async (email, password) => {
   return createUserWithEmailAndPassword(auth, email, password);
@@ -178,7 +152,6 @@ export const subscribeToAuthChanges = (callback) => {
 // Legacy aliases for backwards compatibility
 export const loginWithGoogle = signInWithGoogle;
 export const loginWithApple = signInWithApple;
-export const loginWithMicrosoft = signInWithMicrosoft;
 export const logout = logOut;
 
 // Export auth instance for direct access if needed

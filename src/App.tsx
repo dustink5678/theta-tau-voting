@@ -9,7 +9,6 @@ import UserDashboard from './pages/UserDashboard';
 import PendingVoters from './pages/PendingVoters';
 import LoadingScreen from './components/LoadingScreen';
 import Navbar from './components/Navbar';
-import AuthHandler from './components/AuthHandler';
 
 // Create a custom maroon theme
 const theme = extendTheme({
@@ -151,11 +150,9 @@ const App = () => {
     <ChakraProvider theme={theme}>
       <Router>
         <AuthProvider>
-          <AuthHandler>
-            <DataProvider>
-              <AppContent />
-            </DataProvider>
-          </AuthHandler>
+          <DataProvider>
+            <AppContent />
+          </DataProvider>
         </AuthProvider>
       </Router>
     </ChakraProvider>

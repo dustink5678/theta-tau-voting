@@ -17,15 +17,13 @@ import {
   CloseButton,
 } from '@chakra-ui/react';
 import { FcGoogle } from 'react-icons/fc';
-import { FaMicrosoft } from 'react-icons/fa';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import thetaTauLogo from '../assets/logo.png';
 
 const Login = () => {
-  const { signInWithGoogle, loginWithMicrosoft, resetUserCache, signOut, user } = useAuth() as any;
+  const { signInWithGoogle, resetUserCache, signOut, user } = useAuth() as any;
   const [isLoading, setIsLoading] = useState(false);
-  const [loadingProvider, setLoadingProvider] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const toast = useToast();
   const navigate = useNavigate();
@@ -54,7 +52,6 @@ const Login = () => {
   // Handle Google sign-in button click
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
-    setLoadingProvider('google');
     setErrorMessage(null);
     try {
       await signInWithGoogle();
@@ -62,22 +59,6 @@ const Login = () => {
       handleAuthError(error, 'Google');
     } finally {
       setIsLoading(false);
-      setLoadingProvider(null);
-    }
-  };
-
-  // Handle Microsoft sign-in button click
-  const handleMicrosoftSignIn = async () => {
-    setIsLoading(true);
-    setLoadingProvider('microsoft');
-    setErrorMessage(null);
-    try {
-      await loginWithMicrosoft();
-    } catch (error: any) {
-      handleAuthError(error, 'Microsoft');
-    } finally {
-      setIsLoading(false);
-      setLoadingProvider(null);
     }
   };
 
@@ -139,9 +120,7 @@ const Login = () => {
           <VStack spacing={4}>
             <Spinner size="xl" color="blue.500" thickness="4px" />
             <Text>
-              {loadingProvider === 'google' && 'Connecting to Google, please wait...'}
-              {loadingProvider === 'microsoft' && 'Connecting to Microsoft, please wait...'}
-              {!loadingProvider && 'Processing, please wait...'}
+              {'Processing, please wait...'}
             </Text>
           </VStack>
         </Center>
@@ -177,7 +156,7 @@ const Login = () => {
         />
         <Heading mb={6} textAlign="center">Theta Tau Voting System</Heading>
         <Text mb={8} textAlign="center" color="gray.600">
-          Sign in with your Google or Microsoft account to participate in chapter voting
+          Sign in with your Google account to participate in chapter voting
         </Text>
         
         {errorMessage && (
@@ -205,19 +184,9 @@ const Login = () => {
             onClick={handleGoogleSignIn}
             width="100%"
             leftIcon={<FcGoogle size={20} />}
-            isLoading={isLoading && loadingProvider === 'google'}
+            isLoading={isLoading}
           >
             Sign in with Google
-          </Button>
-          <Button
-            size="lg"
-            colorScheme="purple"
-            onClick={handleMicrosoftSignIn}
-            width="100%"
-            leftIcon={<FaMicrosoft size={20} />}
-            isLoading={isLoading && loadingProvider === 'microsoft'}
-          >
-            Sign in with Microsoft
           </Button>
           <Button
             size="md"
@@ -225,7 +194,7 @@ const Login = () => {
             colorScheme="gray"
             onClick={handleResetSession}
             width="100%"
-            isLoading={isLoading && !loadingProvider}
+            isLoading={isLoading}
           >
             Reset Session / Clear Cache
           </Button>
