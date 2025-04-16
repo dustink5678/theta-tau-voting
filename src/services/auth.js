@@ -45,37 +45,48 @@ export const checkRedirectResult = async () => {
   }
 };
 
-// Modified Google sign-in with optimal strategy based on browser capabilities
+// Utility to clear cookies and local/session storage for cache reset
+export function resetUserCache() {
+  // Clear all cookies
+  document.cookie.split(';').forEach((c) => {
+    document.cookie = c
+      .replace(/^ +/, '')
+      .replace(/=.*/, `=;expires=${new Date(0).toUTCString()};path=/`);
+  });
+  // Clear local and session storage
+  localStorage.clear();
+  sessionStorage.clear();
+}
+
+// Updated Google sign-in: only use popup, with robust error handling
 export const signInWithGoogle = async () => {
   const provider = new GoogleAuthProvider();
-  provider.setCustomParameters({ 
+  provider.setCustomParameters({
     prompt: 'select_account',
     access_type: 'offline',
-    include_granted_scopes: 'true'
+    include_granted_scopes: 'true',
   });
-  
-  // Check if redirect mode was previously activated
-  const redirectMode = localStorage.getItem('useRedirectMode') === 'true';
-  
-  // If we previously used redirect mode successfully, stick with it
-  if (redirectMode) {
-    console.log('Using redirect authentication (previous success)');
-    return signInWithRedirect(auth, provider);
-  }
-
   try {
-    // First try popup
-    console.log('Attempting popup authentication');
+    // Always use popup for Google sign-in
     const result = await signInWithPopup(auth, provider, browserPopupRedirectResolver);
+    // On success, clear any previous error state
     localStorage.setItem('useRedirectMode', 'false');
     return result;
   } catch (error) {
-    console.warn("Popup auth failed, falling back to redirect:", error);
-    // Store that we're using redirect mode for next time
-    localStorage.setItem('useRedirectMode', 'true');
-    // Clear any tenant ID to ensure clean redirect
-    auth.tenantId = null;
-    return signInWithRedirect(auth, provider);
+    // If we get a known cache/cookie/COOP error, reset cache and sign out
+    if (
+      error.code === 'auth/network-request-failed' ||
+      error.code === 'auth/web-storage-unsupported' ||
+      error.code === 'auth/storage-unavailable' ||
+      error.code === 'auth/cookie-not-set' ||
+      error.code === 'auth/operation-not-allowed'
+    ) {
+      resetUserCache();
+      await signOut(auth);
+    }
+    // Remove any redirect mode flag
+    localStorage.removeItem('useRedirectMode');
+    throw error;
   }
 };
 

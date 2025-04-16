@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import * as authService from '../services/auth';
 import { db } from '../config/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { signInWithGoogle, signInWithApple, resetUserCache } from '../services/auth';
 
 // Create the context
 const AuthContext = createContext(null);
@@ -117,19 +118,19 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Sign in with Google
+  // Google sign-in (updated)
   const loginWithGoogle = async () => {
     setLoading(true);
     setError(null);
     try {
-      const result = await authService.signInWithGoogle();
-      // With popup flow, we get the user result directly
-      return result.user;
+      const result = await signInWithGoogle();
+      await getUserData(result.user);
+      setLoading(false);
+      return result;
     } catch (err) {
+      setError(err.message);
       setLoading(false);
-      return handleError(err);
-    } finally {
-      setLoading(false);
+      throw err;
     }
   };
 
@@ -195,7 +196,7 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Create value object with all auth state and methods
+  // Expose resetUserCache for UI use
   const value = {
     currentUser,
     user: currentUser,
@@ -209,6 +210,7 @@ export function AuthProvider({ children }) {
     updateUserEmail,
     updateUserPassword,
     resetPassword,
+    resetUserCache,
     // Aliases for compatibility
     signInWithGoogle: loginWithGoogle
   };
