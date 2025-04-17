@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import * as authService from '../services/auth';
 import { db } from '../config/firebase';
 import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
-import { signInWithGoogle, signInWithApple, resetUserCache, checkRedirectResult } from '../services/auth';
+import { signInWithGoogle, signInWithApple, resetUserCache } from '../services/auth';
 
 // Create the context
 const AuthContext = createContext(null);
@@ -18,7 +18,8 @@ export function AuthProvider({ children }) {
   // Handle errors consistently
   const handleError = (err) => {
     console.error('Auth error:', err);
-    setError(err.message || 'An unknown auth error occurred');
+    setError(err);
+    throw err;
   };
 
   // Get user data from Firestore
@@ -70,34 +71,8 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Effect to check for redirect result on initial load
-  useEffect(() => {
-    const processRedirect = async () => {
-      try {
-        // Check if there's a redirect result from Google/Apple
-        const userFromRedirect = await authService.checkRedirectResult();
-        if (userFromRedirect) {
-          // If redirect resulted in a user, Firestore listener will pick them up.
-          // We might still be loading until the Firestore data is fetched.
-          console.log('Redirect result processed.');
-        } else {
-          // No redirect result, proceed with initial auth state check
-          // If onAuthStateChanged hasn't finished yet, setLoading(false) might be premature.
-          // Let onAuthStateChanged handle the final loading state.
-        }
-      } catch (err) {
-        console.error('Error processing redirect result in AuthContext:', err);
-        handleError(err);
-        setLoading(false); // Stop loading on redirect error
-      }
-    };
-
-    processRedirect();
-  }, []);
-
   // Replace the useEffect for auth state changes with a real-time Firestore listener
   useEffect(() => {
-    setLoading(true); // Start loading when the listener is set up
     let unsubscribeUserDoc = null;
     const unsubscribeAuth = authService.subscribeToAuthChanges(async (firebaseUser) => {
       if (firebaseUser) {
@@ -157,18 +132,23 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Google sign-in: Initiate redirect flow
+  // Google sign-in (updated)
   const loginWithGoogle = async () => {
+    setLoading(true);
     setError(null);
     try {
-      await authService.signInWithGoogle();
+      const result = await signInWithGoogle();
+      await getUserData(result.user);
+      setLoading(false);
+      return result;
     } catch (err) {
-      handleError(err);
+      setError(err.message);
+      setLoading(false);
       throw err;
     }
   };
 
-  // Sign in with Apple: Initiate redirect flow (assuming similar update in authService)
+  // Sign in with Apple
   const loginWithApple = async () => {
     setLoading(true);
     setError(null);
