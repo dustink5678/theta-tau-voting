@@ -1,8 +1,8 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import * as authService from '../services/auth';
 import { db } from '../config/firebase';
 import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
-import { resetUserCache, checkRedirectResult } from '../services/auth';
+import { resetUserCache } from '../services/auth';
 
 // Create the context
 const AuthContext = createContext(null);
@@ -14,8 +14,7 @@ export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [redirectCheckComplete, setRedirectCheckComplete] = useState(false);
-  const [authStateEstablished, setAuthStateEstablished] = useState(false);
+  const authInitialized = useRef(false); // Prevent duplicate initializations
 
   // Handle errors consistently
   const handleError = (err, context = 'General') => {
@@ -24,150 +23,111 @@ export function AuthProvider({ children }) {
   };
 
   // Get user data from Firestore
-  const getUserData = async (user) => {
-    if (!user) return null;
-    
+  const getUserData = async (firebaseUser) => {
+    if (!firebaseUser) return null;
+    console.log(`AuthContext: Getting/creating Firestore data for user ${firebaseUser.uid}`);
+    const userRef = doc(db, 'users', firebaseUser.uid);
     try {
-      console.log("Getting user data for:", user.uid);
-      const userRef = doc(db, 'users', user.uid);
       const userDoc = await getDoc(userRef);
-      
       if (userDoc.exists()) {
-        console.log("User document exists:", userDoc.data());
-        // Return a combination of Firebase auth user and Firestore data
-        return {
-          ...user,
-          ...userDoc.data(),
-          uid: user.uid,
-          email: user.email,
-          displayName: user.displayName || userDoc.data().name || 'User'
-        };
+        console.log("AuthContext: Firestore user document exists:", userDoc.id);
+        return { ...firebaseUser, ...userDoc.data(), uid: firebaseUser.uid, email: firebaseUser.email, displayName: firebaseUser.displayName || userDoc.data().name || 'User' };
       } else {
-        console.log("Creating new user document");
-        // Create a new user document
+        console.log("AuthContext: Creating new Firestore user document:", firebaseUser.uid);
         const newUser = {
-          uid: user.uid,
-          email: user.email,
-          displayName: user.displayName || 'User',
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          displayName: firebaseUser.displayName || 'User',
           verified: false,
           answered: false,
           role: 'user',
           createdAt: new Date().toISOString()
         };
-        
         await setDoc(userRef, newUser);
         return newUser;
       }
     } catch (err) {
-      console.error("Error getting user data:", err);
-      return {
-        ...user,
-        uid: user.uid,
-        email: user.email,
-        displayName: user.displayName || 'User',
-        role: 'user',
-        verified: false,
-        answered: false
-      };
+      handleError(err, 'getUserData (Firestore)');
+      // Fallback to basic firebase user info if Firestore fails
+      return { ...firebaseUser, uid: firebaseUser.uid, email: firebaseUser.email, displayName: firebaseUser.displayName || 'User', role: 'user', verified: false, answered: false };
     }
   };
 
-  // Effect to check for redirect result ONCE on initial mount
+  // Combined effect for initialization, redirect check, and auth state listening
   useEffect(() => {
-    console.log('AuthContext: Mounting, starting redirect check...');
-    const processRedirect = async () => {
+    // Ensure this runs only once
+    if (authInitialized.current) return;
+    authInitialized.current = true;
+
+    let unsubscribeAuth = () => {};
+    let unsubscribeUserDoc = () => {};
+
+    const initializeAuth = async () => {
+      console.log('AuthContext: Starting initialization...');
       try {
+        // 1. Check for redirect result FIRST
+        console.log('AuthContext: Checking for redirect result...');
         const userFromRedirect = await authService.checkRedirectResult();
         if (userFromRedirect) {
           console.log('AuthContext: Redirect result found, user:', userFromRedirect.uid);
-          // Don't set user here, let onAuthStateChanged handle it consistently
+          // User *should* be in session now, onAuthStateChanged will pick them up.
         } else {
           console.log('AuthContext: No redirect result found.');
         }
       } catch (err) {
         handleError(err, 'checkRedirectResult');
-      } finally {
-        console.log('AuthContext: Redirect check finished.');
-        setRedirectCheckComplete(true);
+        // Don't stop initialization on redirect error, maybe user has existing session
       }
-    };
 
-    processRedirect();
-    // This effect should only run once on mount.
-  }, []); // Empty dependency array ensures it runs only once
-
-  // Effect for listening to auth state changes AND user document changes
-  useEffect(() => {
-    console.log('AuthContext: Setting up onAuthStateChanged listener...');
-    let unsubscribeUserDoc = null;
-
-    const unsubscribeAuth = authService.subscribeToAuthChanges(async (firebaseUser) => {
-      console.log('AuthContext: onAuthStateChanged triggered. User:', firebaseUser?.uid || 'null');
-      setAuthStateEstablished(true); // Mark that we've received the initial state
-
-      if (firebaseUser) {
-        const userRef = doc(db, 'users', firebaseUser.uid);
-        // Ensure previous listener is cleaned up before starting a new one
-        if (unsubscribeUserDoc) unsubscribeUserDoc(); 
+      // 2. Attach the persistent auth state listener
+      console.log('AuthContext: Setting up onAuthStateChanged listener...');
+      unsubscribeAuth = authService.subscribeToAuthChanges(async (firebaseUser) => {
+        console.log('AuthContext: onAuthStateChanged triggered. User:', firebaseUser?.uid || 'null');
         
-        unsubscribeUserDoc = onSnapshot(userRef, (userDoc) => {
-          if (userDoc.exists()) {
-            console.log('AuthContext: Firestore user doc updated:', userDoc.id);
-            setCurrentUser({
-              ...firebaseUser,
-              ...userDoc.data(),
-              uid: firebaseUser.uid,
-              email: firebaseUser.email,
-              displayName: firebaseUser.displayName || userDoc.data().name || 'User'
-            });
-          } else {
-            console.warn('AuthContext: Firestore user doc not found for logged in user:', firebaseUser.uid);
-            // Keep firebaseUser basic info if doc is missing, but log warning
-             setCurrentUser({ 
-              ...firebaseUser, 
-              uid: firebaseUser.uid, 
-              email: firebaseUser.email, 
-              displayName: firebaseUser.displayName || 'User', 
-              role: 'user', // Default role? 
-              verified: false, 
-              answered: false 
-             });
-            // Or set to null if Firestore doc is mandatory?
-            // setCurrentUser(null); 
-          }
-          // Loading state is handled outside this snapshot listener
-        }, (err) => {
-            handleError(err, 'Firestore onSnapshot');
-             // If Firestore fails, maybe still keep the basic Firebase user?
-             setCurrentUser(firebaseUser); 
-             // Set loading based on overall state below
-        });
-      } else {
-        setCurrentUser(null);
-        // Clean up Firestore listener if user logs out
-        if (unsubscribeUserDoc) unsubscribeUserDoc(); 
-      }
-      // Loading state is now handled in the separate effect below
-    });
+        // Clean up previous user doc listener if it exists
+        unsubscribeUserDoc();
 
-    return () => {
-      console.log('AuthContext: Cleaning up listeners...');
-      unsubscribeAuth();
-      if (unsubscribeUserDoc) unsubscribeUserDoc();
+        if (firebaseUser) {
+          // Fetch/Create Firestore data and potentially listen for updates
+          const userData = await getUserData(firebaseUser);
+          setCurrentUser(userData);
+          
+          // Optional: Set up real-time listener for Firestore document changes *after* getting initial data
+          const userRef = doc(db, 'users', firebaseUser.uid);
+          unsubscribeUserDoc = onSnapshot(userRef, (userDoc) => {
+             if (userDoc.exists()) {
+                 console.log('AuthContext: Firestore user doc updated:', userDoc.id);
+                 // Merge potentially updated Firestore data with existing state
+                 // Avoid overwriting firebaseUser object parts if possible
+                 setCurrentUser(prevUser => ({ ...prevUser, ...userDoc.data() })); 
+             } else {
+                 console.warn('AuthContext: Firestore user doc deleted while user logged in?', firebaseUser.uid);
+                 setCurrentUser(null); // Or handle appropriately
+             }
+          }, (err) => {
+             handleError(err, 'Firestore onSnapshot');
+          });
+
+        } else {
+          setCurrentUser(null);
+        }
+        
+        // Whether user is found or not, initialization is complete after first check
+        console.log('AuthContext: Auth state processed, setting loading to false.');
+        setLoading(false); 
+      });
     };
-  }, []); // Also runs only once on mount
 
-  // Effect to manage the final loading state
-  useEffect(() => {
-    // Only stop loading when BOTH redirect check is done AND initial auth state is known
-    if (redirectCheckComplete && authStateEstablished) {
-      console.log('AuthContext: Redirect check and auth state established. Setting loading to false.');
-      setLoading(false);
-    } else {
-       console.log(`AuthContext: Waiting to finish loading... (Redirect Check: ${redirectCheckComplete}, Auth State: ${authStateEstablished})`);
-       setLoading(true); // Ensure loading remains true until both conditions are met
-    }
-  }, [redirectCheckComplete, authStateEstablished]);
+    initializeAuth();
+
+    // Cleanup function
+    return () => {
+      console.log('AuthContext: Cleaning up listeners on unmount...');
+      unsubscribeAuth();
+      unsubscribeUserDoc();
+      authInitialized.current = false; // Allow re-init if component remounts (though usually shouldn't for top-level provider)
+    };
+  }, []); // Empty dependency array ensures it runs only once on mount
 
   // Register with email and password
   const registerWithEmail = async (email, password) => {
@@ -175,12 +135,13 @@ export function AuthProvider({ children }) {
     setError(null);
     try {
       const userCredential = await authService.registerWithEmail(email, password);
-      return userCredential.user;
+      // Let onAuthStateChanged handle setting the user state
+      // return userCredential.user;
     } catch (err) {
-      return handleError(err);
-    } finally {
-      setLoading(false);
-    }
+      handleError(err, 'registerWithEmail');
+      setLoading(false); // Ensure loading stops on error
+    } 
+    // Loading is set to false by onAuthStateChanged
   };
 
   // Sign in with email and password
@@ -188,52 +149,42 @@ export function AuthProvider({ children }) {
     setLoading(true);
     setError(null);
     try {
-      const userCredential = await authService.loginWithEmail(email, password);
-      return userCredential.user;
+      await authService.loginWithEmail(email, password);
+      // Let onAuthStateChanged handle setting the user state
     } catch (err) {
-      return handleError(err);
-    } finally {
-      setLoading(false);
+      handleError(err, 'loginWithEmail');
+      setLoading(false); // Ensure loading stops on error
     }
+    // Loading is set to false by onAuthStateChanged
   };
 
   // Google sign-in: Initiate redirect flow
   const loginWithGoogle = async () => {
+    // Don't set loading here, page will reload
     setError(null);
     console.log('AuthContext: Initiating Google Sign-In (Redirect)');
     try {
       await authService.signInWithGoogle();
-      // Redirect initiated, no immediate result here.
     } catch (err) {
       handleError(err, 'signInWithGoogle (Initiation)');
-      throw err; // Re-throw for UI component to handle
+      // Potentially set loading false here if redirect fails?
     }
   };
 
   // Sign in with Apple: Initiate redirect flow
   const loginWithApple = async () => {
-    setLoading(true); // Needs review if switching Apple to redirect too
-    setError(null);
-    console.log('AuthContext: Initiating Apple Sign-In');
-    try {
-      // Assuming authService.signInWithApple handles popup/redirect logic internally
-      const result = await authService.signInWithApple(); 
-      // If Apple also uses redirect, this needs adjustment similar to Google
-      // If it uses popup, the result handling might be okay, but needs review
-      if (result?.user) { // Check if result is from popup
-         console.log('AuthContext: Apple Sign-In (Popup) successful');
-         // Let onAuthStateChanged handle user state update for consistency
-         // return result.user; 
-      } else {
-         console.log('AuthContext: Apple Sign-In (Redirect) initiated');
-      }
-    } catch (err) {
-      handleError(err, 'signInWithApple');
-      // setLoading(false); // Handled by loading state effect
-      throw err; // Re-throw for UI
-    } finally {
-      // setLoading(false); // Handled by loading state effect
-    }
+     // Review Apple logic if switching to redirect
+     setLoading(true); 
+     setError(null);
+     console.log('AuthContext: Initiating Apple Sign-In');
+     try {
+       await authService.signInWithApple(); // Assumes service handles popup/redirect
+       // Let onAuthStateChanged handle user state if successful
+     } catch (err) {
+       handleError(err, 'signInWithApple');
+       setLoading(false); // Ensure loading stops on error
+     }
+     // Loading is set to false by onAuthStateChanged if successful
   };
 
   // Sign out
@@ -242,10 +193,8 @@ export function AuthProvider({ children }) {
     console.log('AuthContext: Signing out...');
     try {
       await authService.logOut();
-      setCurrentUser(null); // Explicitly set user to null on sign out
-      setAuthStateEstablished(false); // Reset established state
-      setRedirectCheckComplete(false); // Reset redirect check state? Maybe not needed.
-    } catch (err) {
+      // onAuthStateChanged will set user to null and loading to false
+    } catch (err) { 
       handleError(err, 'signOut');
     }
   };
@@ -307,6 +256,8 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={value}>
       {!loading && children}
+      {/* Optional global loading indicator */} 
+      {/* {loading && <GlobalLoadingSpinner />} */}
     </AuthContext.Provider>
   );
 }
