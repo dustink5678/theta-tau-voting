@@ -58,35 +58,23 @@ export function resetUserCache() {
   sessionStorage.clear();
 }
 
-// Updated Google sign-in: only use popup, with robust error handling
+// Function to initiate Google sign-in using Redirect
 export const signInWithGoogle = async () => {
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({
-    prompt: 'select_account',
-    access_type: 'offline',
-    include_granted_scopes: 'true',
+    prompt: 'select_account', // Optional: forces account selection
+    // access_type: 'offline', // Generally not needed for frontend auth
+    // include_granted_scopes: 'true', // Usually default behavior
   });
   try {
-    // Always use popup for Google sign-in
-    const result = await signInWithPopup(auth, provider, browserPopupRedirectResolver);
-    // On success, clear any previous error state
-    localStorage.setItem('useRedirectMode', 'false');
-    return result;
+    // Initiate the redirect flow
+    await signInWithRedirect(auth, provider);
+    // Note: No result is returned here immediately, it's handled by getRedirectResult
   } catch (error) {
-    // If we get a known cache/cookie/COOP error, reset cache and sign out
-    if (
-      error.code === 'auth/network-request-failed' ||
-      error.code === 'auth/web-storage-unsupported' ||
-      error.code === 'auth/storage-unavailable' ||
-      error.code === 'auth/cookie-not-set' ||
-      error.code === 'auth/operation-not-allowed'
-    ) {
-      resetUserCache();
-      await signOut(auth);
-    }
-    // Remove any redirect mode flag
-    localStorage.removeItem('useRedirectMode');
-    throw error;
+    console.error("Error starting Google sign-in redirect:", error);
+    // Remove any potentially stale redirect flag on initiation error
+    localStorage.removeItem('useRedirectMode'); // Keep existing error handling related to this
+    throw error; // Re-throw the error to be handled by the caller
   }
 };
 
