@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import * as authService from '../services/auth';
 import { db } from '../config/firebase';
 import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
-import { signInWithGoogle, signInWithApple, resetUserCache, checkRedirectResult } from '../services/auth';
+import { resetUserCache, checkRedirectResult } from '../services/auth';
 
 // Create the context
 const AuthContext = createContext(null);
@@ -14,11 +14,13 @@ export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [redirectCheckComplete, setRedirectCheckComplete] = useState(false);
+  const [authStateEstablished, setAuthStateEstablished] = useState(false);
 
   // Handle errors consistently
-  const handleError = (err) => {
-    console.error('Auth error:', err);
-    setError(err.message || 'An unknown auth error occurred');
+  const handleError = (err, context = 'General') => {
+    console.error(`Auth error (${context}):`, err);
+    setError(err.message || `An unknown auth error occurred (${context})`);
   };
 
   // Get user data from Firestore
@@ -70,41 +72,47 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Effect to check for redirect result on initial load
+  // Effect to check for redirect result ONCE on initial mount
   useEffect(() => {
+    console.log('AuthContext: Mounting, starting redirect check...');
     const processRedirect = async () => {
       try {
-        // Check if there's a redirect result from Google/Apple
         const userFromRedirect = await authService.checkRedirectResult();
         if (userFromRedirect) {
-          // If redirect resulted in a user, Firestore listener will pick them up.
-          // We might still be loading until the Firestore data is fetched.
-          console.log('Redirect result processed.');
+          console.log('AuthContext: Redirect result found, user:', userFromRedirect.uid);
+          // Don't set user here, let onAuthStateChanged handle it consistently
         } else {
-          // No redirect result, proceed with initial auth state check
-          // If onAuthStateChanged hasn't finished yet, setLoading(false) might be premature.
-          // Let onAuthStateChanged handle the final loading state.
+          console.log('AuthContext: No redirect result found.');
         }
       } catch (err) {
-        console.error('Error processing redirect result in AuthContext:', err);
-        handleError(err);
-        setLoading(false); // Stop loading on redirect error
+        handleError(err, 'checkRedirectResult');
+      } finally {
+        console.log('AuthContext: Redirect check finished.');
+        setRedirectCheckComplete(true);
       }
     };
 
     processRedirect();
-  }, []);
+    // This effect should only run once on mount.
+  }, []); // Empty dependency array ensures it runs only once
 
-  // Replace the useEffect for auth state changes with a real-time Firestore listener
+  // Effect for listening to auth state changes AND user document changes
   useEffect(() => {
-    setLoading(true); // Start loading when the listener is set up
+    console.log('AuthContext: Setting up onAuthStateChanged listener...');
     let unsubscribeUserDoc = null;
+
     const unsubscribeAuth = authService.subscribeToAuthChanges(async (firebaseUser) => {
+      console.log('AuthContext: onAuthStateChanged triggered. User:', firebaseUser?.uid || 'null');
+      setAuthStateEstablished(true); // Mark that we've received the initial state
+
       if (firebaseUser) {
-        // Listen to changes on the user's Firestore document
         const userRef = doc(db, 'users', firebaseUser.uid);
+        // Ensure previous listener is cleaned up before starting a new one
+        if (unsubscribeUserDoc) unsubscribeUserDoc(); 
+        
         unsubscribeUserDoc = onSnapshot(userRef, (userDoc) => {
           if (userDoc.exists()) {
+            console.log('AuthContext: Firestore user doc updated:', userDoc.id);
             setCurrentUser({
               ...firebaseUser,
               ...userDoc.data(),
@@ -113,21 +121,53 @@ export function AuthProvider({ children }) {
               displayName: firebaseUser.displayName || userDoc.data().name || 'User'
             });
           } else {
-            setCurrentUser(null);
+            console.warn('AuthContext: Firestore user doc not found for logged in user:', firebaseUser.uid);
+            // Keep firebaseUser basic info if doc is missing, but log warning
+             setCurrentUser({ 
+              ...firebaseUser, 
+              uid: firebaseUser.uid, 
+              email: firebaseUser.email, 
+              displayName: firebaseUser.displayName || 'User', 
+              role: 'user', // Default role? 
+              verified: false, 
+              answered: false 
+             });
+            // Or set to null if Firestore doc is mandatory?
+            // setCurrentUser(null); 
           }
-          setLoading(false);
+          // Loading state is handled outside this snapshot listener
+        }, (err) => {
+            handleError(err, 'Firestore onSnapshot');
+             // If Firestore fails, maybe still keep the basic Firebase user?
+             setCurrentUser(firebaseUser); 
+             // Set loading based on overall state below
         });
       } else {
         setCurrentUser(null);
-        setLoading(false);
+        // Clean up Firestore listener if user logs out
+        if (unsubscribeUserDoc) unsubscribeUserDoc(); 
       }
+      // Loading state is now handled in the separate effect below
     });
 
     return () => {
+      console.log('AuthContext: Cleaning up listeners...');
       unsubscribeAuth();
       if (unsubscribeUserDoc) unsubscribeUserDoc();
     };
-  }, []);
+  }, []); // Also runs only once on mount
+
+  // Effect to manage the final loading state
+  useEffect(() => {
+    // Only stop loading when BOTH redirect check is done AND initial auth state is known
+    if (redirectCheckComplete && authStateEstablished) {
+      console.log('AuthContext: Redirect check and auth state established. Setting loading to false.');
+      setLoading(false);
+    } else {
+       console.log(`AuthContext: Waiting to finish loading... (Redirect Check: ${redirectCheckComplete}, Auth State: ${authStateEstablished})`);
+       setLoading(true); // Ensure loading remains true until both conditions are met
+    }
+  }, [redirectCheckComplete, authStateEstablished]);
 
   // Register with email and password
   const registerWithEmail = async (email, password) => {
@@ -160,37 +200,53 @@ export function AuthProvider({ children }) {
   // Google sign-in: Initiate redirect flow
   const loginWithGoogle = async () => {
     setError(null);
+    console.log('AuthContext: Initiating Google Sign-In (Redirect)');
     try {
       await authService.signInWithGoogle();
+      // Redirect initiated, no immediate result here.
     } catch (err) {
-      handleError(err);
-      throw err;
+      handleError(err, 'signInWithGoogle (Initiation)');
+      throw err; // Re-throw for UI component to handle
     }
   };
 
-  // Sign in with Apple: Initiate redirect flow (assuming similar update in authService)
+  // Sign in with Apple: Initiate redirect flow
   const loginWithApple = async () => {
-    setLoading(true);
+    setLoading(true); // Needs review if switching Apple to redirect too
     setError(null);
+    console.log('AuthContext: Initiating Apple Sign-In');
     try {
-      const result = await authService.signInWithApple();
-      // With popup flow, we get the user result directly
-      return result.user;
+      // Assuming authService.signInWithApple handles popup/redirect logic internally
+      const result = await authService.signInWithApple(); 
+      // If Apple also uses redirect, this needs adjustment similar to Google
+      // If it uses popup, the result handling might be okay, but needs review
+      if (result?.user) { // Check if result is from popup
+         console.log('AuthContext: Apple Sign-In (Popup) successful');
+         // Let onAuthStateChanged handle user state update for consistency
+         // return result.user; 
+      } else {
+         console.log('AuthContext: Apple Sign-In (Redirect) initiated');
+      }
     } catch (err) {
-      setLoading(false);
-      return handleError(err);
+      handleError(err, 'signInWithApple');
+      // setLoading(false); // Handled by loading state effect
+      throw err; // Re-throw for UI
     } finally {
-      setLoading(false);
+      // setLoading(false); // Handled by loading state effect
     }
   };
 
   // Sign out
   const signOut = async () => {
     setError(null);
+    console.log('AuthContext: Signing out...');
     try {
       await authService.logOut();
+      setCurrentUser(null); // Explicitly set user to null on sign out
+      setAuthStateEstablished(false); // Reset established state
+      setRedirectCheckComplete(false); // Reset redirect check state? Maybe not needed.
     } catch (err) {
-      return handleError(err);
+      handleError(err, 'signOut');
     }
   };
 
@@ -230,7 +286,7 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Expose resetUserCache for UI use
+  // Expose values
   const value = {
     currentUser,
     user: currentUser,
@@ -244,8 +300,7 @@ export function AuthProvider({ children }) {
     updateUserEmail,
     updateUserPassword,
     resetPassword,
-    resetUserCache,
-    // Aliases for compatibility
+    resetUserCache: authService.resetUserCache,
     signInWithGoogle: loginWithGoogle,
   };
 
