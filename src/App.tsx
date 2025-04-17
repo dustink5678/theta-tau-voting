@@ -1,14 +1,17 @@
+import React, { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Box, Flex, ChakraProvider, extendTheme } from '@chakra-ui/react';
 import { AuthProvider } from './contexts/AuthContext';
 import { useAuth } from './contexts/AuthContext';
 import { DataProvider } from './contexts/DataContext';
-import Login from './pages/Login';
-import AdminPanel from './pages/AdminPanel'
-import UserDashboard from './pages/UserDashboard';
-import PendingVoters from './pages/PendingVoters';
 import LoadingScreen from './components/LoadingScreen';
 import Navbar from './components/Navbar';
+
+// Dynamically import page components
+const Login = lazy(() => import('./pages/Login'));
+const AdminPanel = lazy(() => import('./pages/AdminPanel'));
+const UserDashboard = lazy(() => import('./pages/UserDashboard'));
+const PendingVoters = lazy(() => import('./pages/PendingVoters'));
 
 // Create a custom maroon theme
 const theme = extendTheme({
@@ -100,46 +103,48 @@ const AppContent = () => {
   
   return (
     <Flex direction="column" width="100vw" minH="100vh" maxW="100vw" overflow="hidden">
-      <Routes>
-        <Route path="/login" element={
-          <PublicRoute>
-            <Login />
-          </PublicRoute>
-        } />
-        <Route
-          path="/admin"
-          element={
-            <PrivateRoute adminOnly>
-              <AdminPanel />
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path="/dashboard"
-          element={
-            <PrivateRoute>
-              <UserDashboard />
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path="/pending"
-          element={
+      <Suspense fallback={<LoadingScreen />}>
+        <Routes>
+          <Route path="/login" element={
             <PublicRoute>
-              <PendingVoters />
+              <Login />
             </PublicRoute>
-          }
-        />
-        <Route path="/" element={
-          loading ? (
-            <LoadingScreen />
-          ) : user?.role === 'admin' ? (
-            <Navigate to="/admin" replace /> 
-          ) : (
-            <Navigate to="/dashboard" replace />
-          )
-        } />
-      </Routes>
+          } />
+          <Route
+            path="/admin"
+            element={
+              <PrivateRoute adminOnly>
+                <AdminPanel />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/dashboard"
+            element={
+              <PrivateRoute>
+                <UserDashboard />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/pending"
+            element={
+              <PublicRoute>
+                <PendingVoters />
+              </PublicRoute>
+            }
+          />
+          <Route path="/" element={
+            user?.role === 'admin' ? (
+              <Navigate to="/admin" replace /> 
+            ) : user ? (
+              <Navigate to="/dashboard" replace />
+            ) : (
+               <Navigate to="/login" replace />
+            )
+          } />
+        </Routes>
+      </Suspense>
     </Flex>
   );
 };
