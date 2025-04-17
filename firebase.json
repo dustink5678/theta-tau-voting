@@ -25,19 +25,6 @@
             "value": "no-cache, no-store, must-revalidate"
           }
         ]
-      },
-      {
-        "source": "**/__/auth/**",
-        "headers": [
-          {
-            "key": "Cache-Control",
-            "value": "no-store"
-          },
-          {
-            "key": "Cross-Origin-Opener-Policy",
-            "value": "unsafe-none"
-          }
-        ]
       }
     ]
   },
