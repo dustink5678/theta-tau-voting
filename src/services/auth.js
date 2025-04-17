@@ -58,61 +58,61 @@ export function resetUserCache() {
   sessionStorage.clear();
 }
 
-// Updated Google sign-in: only use popup, with robust error handling
+// Updated Google sign-in: use redirect
 export const signInWithGoogle = async () => {
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({
-    prompt: 'select_account',
-    access_type: 'offline',
-    include_granted_scopes: 'true',
+    prompt: 'select_account', // Optional: customize prompt
+    // Add any other Google-specific parameters if needed
   });
   try {
-    // Always use popup for Google sign-in
-    const result = await signInWithPopup(auth, provider, browserPopupRedirectResolver);
-    // On success, clear any previous error state
-    localStorage.setItem('useRedirectMode', 'false');
-    return result;
+    // Initiate redirect flow
+    await signInWithRedirect(auth, provider);
+    // Note: signInWithRedirect does not return a result directly here.
+    // The result is handled by getRedirectResult on page load.
   } catch (error) {
-    // If we get a known cache/cookie/COOP error, reset cache and sign out
-    if (
-      error.code === 'auth/network-request-failed' ||
-      error.code === 'auth/web-storage-unsupported' ||
-      error.code === 'auth/storage-unavailable' ||
-      error.code === 'auth/cookie-not-set' ||
-      error.code === 'auth/operation-not-allowed'
-    ) {
-      resetUserCache();
-      await signOut(auth);
-    }
-    // Remove any redirect mode flag
-    localStorage.removeItem('useRedirectMode');
+    console.error('Error initiating Google sign-in redirect:', error);
+    // Re-throw the error to be handled by the caller if necessary
     throw error;
   }
+  // No return value needed here as the page will redirect.
 };
 
-// Modified Apple sign-in with the same approach
+// Modified Apple sign-in: Keep the popup/redirect fallback logic
 export const signInWithApple = async () => {
   const provider = new OAuthProvider('apple.com');
   provider.addScope('email');
   provider.addScope('name');
   
-  const redirectMode = localStorage.getItem('useRedirectMode') === 'true';
-  
-  if (redirectMode) {
-    console.log('Using redirect authentication (previous success)');
-    return signInWithRedirect(auth, provider);
-  }
-  
   try {
-    console.log('Attempting popup authentication');
+    console.log('Attempting Apple popup authentication');
+    // Try popup first for Apple
     const result = await signInWithPopup(auth, provider, browserPopupRedirectResolver);
-    localStorage.setItem('useRedirectMode', 'false');
-    return result;
+    return result; // Return result directly on popup success
   } catch (error) {
-    console.warn("Popup auth failed, falling back to redirect:", error);
-    localStorage.setItem('useRedirectMode', 'true');
-    auth.tenantId = null;
-    return signInWithRedirect(auth, provider);
+    // Handle common popup errors or decide to fallback
+    if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
+      console.warn('Apple Popup cancelled by user.');
+      // Don't automatically redirect if user explicitly closed popup
+      throw error; 
+    } else if (error.code === 'auth/operation-not-supported-in-this-environment' || 
+               error.code === 'auth/popup-blocked' ||
+               error.code === 'auth/cors-unsupported') { 
+      // Fallback to redirect if popup is blocked or unsupported
+      console.warn("Apple Popup auth failed, falling back to redirect:", error);
+      auth.tenantId = null; // Ensure tenant ID is null if necessary for redirect
+      try {
+        await signInWithRedirect(auth, provider);
+        // Redirect initiated, no return value needed here.
+      } catch (redirectError) {
+        console.error("Error initiating Apple sign-in redirect:", redirectError);
+        throw redirectError; // Throw redirect initiation error
+      }
+    } else {
+       // Handle other errors (e.g., network, provider errors)
+       console.error("Apple sign-in error:", error);
+       throw error;
+    }
   }
 };
 

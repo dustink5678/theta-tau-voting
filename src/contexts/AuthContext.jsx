@@ -2,7 +2,19 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import * as authService from '../services/auth';
 import { db } from '../config/firebase';
 import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
-import { signInWithGoogle, signInWithApple, resetUserCache } from '../services/auth';
+import { 
+  signInWithGoogle as authSignInWithGoogle,
+  signInWithApple as authSignInWithApple,
+  resetUserCache as authResetUserCache,
+  checkRedirectResult,
+  subscribeToAuthChanges,
+  logOut,
+  registerWithEmail,
+  loginWithEmail,
+  updateUserEmail,
+  updateUserPassword,
+  resetPassword
+} from '../services/auth';
 
 // Create the context
 const AuthContext = createContext(null);
@@ -74,27 +86,66 @@ export function AuthProvider({ children }) {
   // Replace the useEffect for auth state changes with a real-time Firestore listener
   useEffect(() => {
     let unsubscribeUserDoc = null;
-    const unsubscribeAuth = authService.subscribeToAuthChanges(async (firebaseUser) => {
+    let isRedirectResultChecked = false;
+    let isAuthStateReady = false;
+
+    const checkLoadingComplete = () => {
+      if (isRedirectResultChecked && isAuthStateReady) {
+        setLoading(false);
+      }
+    };
+    
+    // Call checkRedirectResult when the component mounts
+    checkRedirectResult().then(userFromRedirect => {
+      console.log('Redirect result checked, user:', userFromRedirect);
+      isRedirectResultChecked = true;
+      checkLoadingComplete();
+    }).catch(error => {
+      console.error("Error during initial redirect check:", error);
+      isRedirectResultChecked = true; // Still mark as checked even on error
+      checkLoadingComplete();
+    });
+
+    const unsubscribeAuth = subscribeToAuthChanges(async (firebaseUser) => {
       if (firebaseUser) {
         // Listen to changes on the user's Firestore document
         const userRef = doc(db, 'users', firebaseUser.uid);
+        // Clear previous listener if any
+        if (unsubscribeUserDoc) unsubscribeUserDoc();
+
         unsubscribeUserDoc = onSnapshot(userRef, (userDoc) => {
           if (userDoc.exists()) {
             setCurrentUser({
-              ...firebaseUser,
-              ...userDoc.data(),
+              ...firebaseUser, // Base Firebase Auth user data
+              ...userDoc.data(), // Firestore specific data (role, verified, etc.)
+              // Ensure crucial fields from Firebase Auth are preserved
               uid: firebaseUser.uid,
-              email: firebaseUser.email,
-              displayName: firebaseUser.displayName || userDoc.data().name || 'User'
+              email: firebaseUser.email, 
+              displayName: userDoc.data().displayName || firebaseUser.displayName || userDoc.data().name || 'User' 
             });
           } else {
-            setCurrentUser(null);
+             // If Firestore doc doesn't exist (edge case?), maybe create it or set user to null?
+             // For now, setting user to null if Firestore doc is missing.
+             console.warn('Firestore document missing for user:', firebaseUser.uid);
+             setCurrentUser(null);
+             // Attempt to create the doc again
+             getUserData(firebaseUser).catch(err => console.error("Error trying to create missing user doc:", err));
           }
-          setLoading(false);
+          isAuthStateReady = true;
+          checkLoadingComplete();
+        }, (error) => {
+            // Error handling for the Firestore snapshot listener
+            console.error("Error listening to user document:", error);
+            setCurrentUser(null); // Assume user data is invalid/unavailable on error
+            isAuthStateReady = true;
+            checkLoadingComplete();
         });
       } else {
+        // User is signed out
+        if (unsubscribeUserDoc) unsubscribeUserDoc();
         setCurrentUser(null);
-        setLoading(false);
+        isAuthStateReady = true;
+        checkLoadingComplete();
       }
     });
 
@@ -104,12 +155,13 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
-  // Register with email and password
-  const registerWithEmail = async (email, password) => {
+  // Register with email and password (using imported service)
+  const register = async (email, password) => {
     setLoading(true);
     setError(null);
     try {
-      const userCredential = await authService.registerWithEmail(email, password);
+      const userCredential = await registerWithEmail(email, password);
+      // Optionally wait for Firestore doc creation triggered by onAuthStateChanged
       return userCredential.user;
     } catch (err) {
       return handleError(err);
@@ -118,12 +170,13 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Sign in with email and password
-  const loginWithEmail = async (email, password) => {
+  // Sign in with email and password (using imported service)
+  const login = async (email, password) => {
     setLoading(true);
     setError(null);
     try {
-      const userCredential = await authService.loginWithEmail(email, password);
+      const userCredential = await loginWithEmail(email, password);
+      // Auth state change will handle setting the user state
       return userCredential.user;
     } catch (err) {
       return handleError(err);
@@ -132,101 +185,107 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Google sign-in (updated)
-  const loginWithGoogle = async () => {
+  // Google sign-in (using imported service)
+  const googleLogin = async () => {
     setLoading(true);
     setError(null);
     try {
-      const result = await signInWithGoogle();
-      await getUserData(result.user);
-      setLoading(false);
-      return result;
+      // signInWithGoogle from authService now initiates redirect
+      await authSignInWithGoogle();
+      // Result is handled by getRedirectResult and onAuthStateChanged
     } catch (err) {
-      setError(err.message);
+      // Handle redirect initiation errors if any
+      setError(err.message || 'Failed to initiate Google Sign-in');
       setLoading(false);
       throw err;
     }
+    // setLoading(false) will be handled by the useEffect hook when auth state updates
   };
 
-  // Sign in with Apple
-  const loginWithApple = async () => {
+  // Sign in with Apple (using imported service)
+  const appleLogin = async () => {
     setLoading(true);
     setError(null);
     try {
-      const result = await authService.signInWithApple();
-      // With popup flow, we get the user result directly
-      return result.user;
+      // authSignInWithApple handles popup/redirect logic
+      await authSignInWithApple();
+      // Result/state update handled by getRedirectResult/onAuthStateChanged
     } catch (err) {
+      setError(err.message || 'Failed to initiate Apple Sign-in');
       setLoading(false);
-      return handleError(err);
-    } finally {
-      setLoading(false);
-    }
+      throw err;
+    } 
   };
 
-  // Sign out
-  const signOut = async () => {
+  // Sign out (using imported service)
+  const logout = async () => {
     setError(null);
     try {
-      await authService.logOut();
+      await logOut();
+      // Auth state change will set currentUser to null
     } catch (err) {
       return handleError(err);
     }
   };
 
-  // Update user email
-  const updateUserEmail = async (newEmail) => {
+  // Update user email (using imported service)
+  const updateEmailHandler = async (newEmail) => {
     setError(null);
     try {
       if (!currentUser) {
         throw new Error('No user is currently logged in');
       }
-      await authService.updateUserEmail(currentUser, newEmail);
+      await updateUserEmail(currentUser, newEmail);
+      // Optionally refresh user data or rely on listeners
     } catch (err) {
       return handleError(err);
     }
   };
 
-  // Update user password
-  const updateUserPassword = async (newPassword) => {
+  // Update user password (using imported service)
+  const updatePasswordHandler = async (newPassword) => {
     setError(null);
     try {
       if (!currentUser) {
         throw new Error('No user is currently logged in');
       }
-      await authService.updateUserPassword(currentUser, newPassword);
+      await updateUserPassword(currentUser, newPassword);
     } catch (err) {
       return handleError(err);
     }
   };
 
-  // Reset password
-  const resetPassword = async (email) => {
+  // Reset password (using imported service)
+  const resetPasswordHandler = async (email) => {
     setError(null);
     try {
-      await authService.resetPassword(email);
+      await resetPassword(email);
     } catch (err) {
       return handleError(err);
     }
   };
 
-  // Expose resetUserCache for UI use
+  // Expose resetUserCache for UI use (using imported service)
+  const resetCache = () => {
+    authResetUserCache();
+  }
+
   const value = {
     currentUser,
-    user: currentUser,
+    user: currentUser, // Alias for compatibility
     loading,
     error,
-    registerWithEmail,
-    loginWithEmail,
-    loginWithGoogle,
-    loginWithApple,
-    signOut,
-    updateUserEmail,
-    updateUserPassword,
-    resetPassword,
-    resetUserCache,
+    registerWithEmail: register, // Use wrapped function
+    loginWithEmail: login,       // Use wrapped function
+    loginWithGoogle: googleLogin, // Use wrapped function
+    loginWithApple: appleLogin,   // Use wrapped function
+    signOut: logout,             // Use wrapped function
+    updateUserEmail: updateEmailHandler, // Use wrapped function
+    updateUserPassword: updatePasswordHandler, // Use wrapped function
+    resetPassword: resetPasswordHandler, // Use wrapped function
+    resetUserCache: resetCache, // Use wrapped function
     // Aliases for compatibility
-    signInWithGoogle: loginWithGoogle,
+    signInWithGoogle: googleLogin,
   };
 
   return (
