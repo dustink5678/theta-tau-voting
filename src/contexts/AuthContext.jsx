@@ -59,11 +59,14 @@ export function AuthProvider({ children }) {
     if (authInitialized.current) return;
     authInitialized.current = true;
 
+    // Log the URL immediately on initialization
+    console.log('AuthContext: Initializing. Current URL:', window.location.href);
+
     let unsubscribeAuth = () => {};
     let unsubscribeUserDoc = () => {};
 
     const initializeAuth = async () => {
-      console.log('AuthContext: Starting initialization...');
+      console.log('AuthContext: Starting initialization async...');
       try {
         // 1. Check for redirect result FIRST
         console.log('AuthContext: Checking for redirect result...');
