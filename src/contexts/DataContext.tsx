@@ -2,7 +2,6 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import { collection, onSnapshot, Unsubscribe } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { User, Question } from '../types/index';
-import { useAuthContext } from '../contexts/AuthContext';
 
 interface DataContextType {
   users: User[];
@@ -26,46 +25,34 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
   const [isDataLoading, setIsDataLoading] = useState(true);
-  const [isInitialLoadComplete, setIsInitialLoadComplete] = useState(false);
-  const { currentUser: user } = useAuthContext();
 
   useEffect(() => {
-    if (!user) return;
-
-    if (!isInitialLoadComplete) {
-      setIsDataLoading(true);
-    }
+    setIsDataLoading(true);
     
     let unsubscribeUsers: Unsubscribe | null = null;
     let unsubscribeQuestions: Unsubscribe | null = null;
 
-    // Track if both subscriptions have received initial data
     let userDataReceived = false;
     let questionDataReceived = false;
+    const checkLoadingComplete = () => {
+        if (userDataReceived && questionDataReceived) {
+            setIsDataLoading(false);
+        }
+    }
 
-    // Subscribe to users
     unsubscribeUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
       const userData: User[] = snapshot.docs.map((doc) => ({
         ...(doc.data() as User),
         uid: doc.id,
       }));
       setUsers(userData);
-      
-      // Mark user data as received
       userDataReceived = true;
-      
-      // If both subscriptions have received data, mark initial load as complete
-      if (userDataReceived && questionDataReceived && !isInitialLoadComplete) {
-        setIsInitialLoadComplete(true);
-        setIsDataLoading(false);
-      }
+      checkLoadingComplete();
     }, error => {
       console.error("Error listening to users collection:", error);
       setIsDataLoading(false);
-      setIsInitialLoadComplete(true);
     });
 
-    // Subscribe to questions
     unsubscribeQuestions = onSnapshot(collection(db, 'questions'), (snapshot) => {
       const questionData = snapshot.docs.map((doc) => ({
         ...(doc.data() as Question),
@@ -74,26 +61,18 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       setQuestions(questionData);
       const active = questionData.find((q) => q.active);
       setCurrentQuestion(active || null);
-      
-      // Mark question data as received
       questionDataReceived = true;
-      
-      // If both subscriptions have received data, mark initial load as complete
-      if (userDataReceived && questionDataReceived && !isInitialLoadComplete) {
-        setIsInitialLoadComplete(true);
-        setIsDataLoading(false);
-      }
+      checkLoadingComplete();
     }, error => {
       console.error("Error listening to questions collection:", error);
       setIsDataLoading(false);
-      setIsInitialLoadComplete(true);
     });
 
     return () => {
       if (unsubscribeUsers) unsubscribeUsers();
       if (unsubscribeQuestions) unsubscribeQuestions();
     };
-  }, [user, isInitialLoadComplete]);
+  }, []);
 
   return (
     <DataContext.Provider value={{ users, questions, currentQuestion, isDataLoading }}>

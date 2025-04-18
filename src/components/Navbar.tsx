@@ -9,28 +9,11 @@ import {
   MenuList,
   MenuItem,
   MenuDivider,
-  Tabs,
-  TabList,
-  Tab,
 } from '@chakra-ui/react';
-import { useAuth } from '../contexts/AuthContext';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext.tsx';
 
 const Navbar = () => {
-  const { user, signOut } = useAuth();
-  const navigate = useNavigate();
-  const location = useLocation();
-
-  // Determine active tab based on current path
-  const tabIndex = location.pathname === '/dashboard' ? 1 : 0;
-
-  const handleTabChange = (index: number) => {
-    if (index === 0) {
-      navigate('/admin'); // Changed from '/dashboard'
-    } else {
-      navigate('/dashboard'); // Changed from '/admin'
-    }
-  };
+  const { currentUser, signOut, loading } = useAuth();
 
   return (
     <Flex
@@ -52,7 +35,7 @@ const Navbar = () => {
           <Text fontWeight="bold" fontSize="lg">Theta Tau Voting</Text>
         </Box>
 
-        {user && (
+        {!loading && currentUser && (
           <Menu>
             <MenuButton 
               as={Button} 
@@ -62,38 +45,16 @@ const Navbar = () => {
               _active={{ bg: 'red.500' }}
             >
               <Flex align="center" gap={2}>
-                <Avatar size="sm" src={user.photoURL || undefined} name={user.displayName || user.name || 'User'} />
-                <Text display={{ base: 'none', md: 'block' }}>{user.displayName || user.name || 'User'}</Text>
+                <Avatar size="sm" src={currentUser.photoURL || undefined} name={currentUser.displayName || 'User'} />
+                <Text display={{ base: 'none', md: 'block' }}>{currentUser.displayName || 'User'}</Text>
               </Flex>
             </MenuButton>
             <MenuList color="black">
-              <MenuItem fontWeight="bold">
-                {user.role === 'admin' ? 'Administrator' : 'Member'}
-              </MenuItem>
-              <MenuDivider />
               <MenuItem onClick={signOut}>Sign Out</MenuItem>
             </MenuList>
           </Menu>
         )}
       </Flex>
-
-      {/* Navigation Tabs for Admin Users */}
-      {user && user.role === 'admin' && (
-        <Tabs 
-          index={tabIndex} 
-          onChange={handleTabChange} 
-          variant="enclosed" 
-          bg="white" 
-          width="100%" 
-          colorScheme="red"
-          px={4}
-        >
-          <TabList>
-            <Tab>Admin Panel</Tab>
-            <Tab>Voting</Tab>
-          </TabList>
-        </Tabs>
-      )}
     </Flex>
   );
 };

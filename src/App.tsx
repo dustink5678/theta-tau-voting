@@ -1,17 +1,16 @@
 import React, { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Box, Flex, ChakraProvider, extendTheme } from '@chakra-ui/react';
-import { AuthProvider } from './contexts/AuthContext';
-import { useAuth } from './contexts/AuthContext';
-import { DataProvider } from './contexts/DataContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext.tsx';
+import { DataProvider } from './contexts/DataContext.tsx';
 import LoadingScreen from './components/LoadingScreen';
-import Navbar from './components/Navbar';
+import Navbar from './components/Navbar.tsx';
 
 // Dynamically import page components
-const Login = lazy(() => import('./pages/Login'));
-const AdminPanel = lazy(() => import('./pages/AdminPanel'));
-const UserDashboard = lazy(() => import('./pages/UserDashboard'));
-const PendingVoters = lazy(() => import('./pages/PendingVoters'));
+const Login = lazy(() => import('./pages/Login.tsx'));
+const AdminPanel = lazy(() => import('./pages/AdminPanel.tsx'));
+const UserDashboard = lazy(() => import('./pages/UserDashboard.tsx'));
+const PendingVoters = lazy(() => import('./pages/PendingVoters.tsx'));
 
 // Create a custom maroon theme
 const theme = extendTheme({
@@ -44,27 +43,20 @@ const theme = extendTheme({
 });
 
 const PrivateRoute = ({ children, adminOnly = false }: { children: React.ReactNode; adminOnly?: boolean }) => {
-  const { user, loading } = useAuth() as any;
+  const { currentUser, loading } = useAuth();
   
   if (loading) {
     return <LoadingScreen />;
   }
 
-  if (!user) {
+  if (!currentUser) {
     return <Navigate to="/login" replace />;
   }
-
-  if (adminOnly && user.role !== 'admin') {
-    return <Navigate to="/dashboard" replace />;
-  }
-
-  // Calculate content height based on whether user is admin (with tabs) or not
-  const contentMinHeight = user.role === 'admin' ? 'calc(100vh - 98px)' : 'calc(100vh - 56px)';
 
   return (
     <Flex direction="column" width="100vw" minH="100vh">
       <Navbar />
-      <Box flex="1" width="100%" maxW="100vw" minH={contentMinHeight}>
+      <Box flex="1" width="100%" maxW="100vw" minH={'calc(100vh - 56px)'} >
         {children}
       </Box>
     </Flex>
@@ -72,17 +64,14 @@ const PrivateRoute = ({ children, adminOnly = false }: { children: React.ReactNo
 };
 
 const PublicRoute = ({ children }: { children: React.ReactNode }) => {
-  const { user, loading } = useAuth() as any;
+  const { currentUser, loading } = useAuth();
   
   if (loading) {
     return <LoadingScreen />;
   }
   
-  // If user is authenticated, redirect them immediately
-  if (user) {
-    return user.role === 'admin' 
-      ? <Navigate to="/admin" replace /> 
-      : <Navigate to="/dashboard" replace />;
+  if (currentUser) {
+    return <Navigate to="/dashboard" replace />;
   }
   
   return (
@@ -92,11 +81,9 @@ const PublicRoute = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
-// MODIFY THIS COMPONENT:
 const AppContent = () => {
-  const { user, loading } = useAuth() as any;
+  const { loading } = useAuth();
   
-  // Show loading screen while determining authentication state
   if (loading) {
     return <LoadingScreen />;
   }
@@ -113,7 +100,7 @@ const AppContent = () => {
           <Route
             path="/admin"
             element={
-              <PrivateRoute adminOnly>
+              <PrivateRoute adminOnly={true}>
                 <AdminPanel />
               </PrivateRoute>
             }
@@ -134,21 +121,12 @@ const AppContent = () => {
               </PublicRoute>
             }
           />
-          <Route path="/" element={
-            user?.role === 'admin' ? (
-              <Navigate to="/admin" replace /> 
-            ) : user ? (
-              <Navigate to="/dashboard" replace />
-            ) : (
-               <Navigate to="/login" replace />
-            )
-          } />
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </Suspense>
     </Flex>
   );
 };
-
 
 const App = () => {
   return (

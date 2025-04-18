@@ -1,158 +1,71 @@
 import { 
-  getAuth, 
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  signInWithRedirect,
-  signInWithPopup,
   GoogleAuthProvider,
-  OAuthProvider,
-  signOut,
+  signInWithRedirect,
+  getRedirectResult, 
   onAuthStateChanged,
-  updateEmail,
-  updatePassword,
-  sendPasswordResetEmail,
-  browserPopupRedirectResolver,
-  browserLocalPersistence,
-  setPersistence,
-  getRedirectResult
+  signOut
 } from 'firebase/auth';
-import { firebaseApp } from '../config/firebase';
+import { auth } from '../config/firebase'; // Import the initialized auth instance
 
-// Initialize Firebase auth service
-const auth = getAuth(firebaseApp);
+/**
+ * Initiates the Google Sign-In flow using redirect.
+ */
+export const signInWithGoogleRedirect = async () => {
+  const provider = new GoogleAuthProvider();
+  // You can add scopes or custom parameters here if needed
+  // provider.addScope('profile');
+  // provider.setCustomParameters({ prompt: 'select_account' });
+  try {
+    await signInWithRedirect(auth, provider);
+    // Redirect will happen, so no return value needed here.
+  } catch (error) {
+    console.error("Error initiating Google Sign-In redirect:", error);
+    // Re-throw the error to be handled by the UI
+    throw error;
+  }
+};
 
-// Set base URL for redirects
-const origin = window.location.origin;
-const redirectUrl = `${origin}/auth`;
-
-// Configure auth persistence to avoid cookie issues
-setPersistence(auth, browserLocalPersistence).catch(err => {
-  console.error("Error setting persistence:", err);
-});
-
-// Check for redirect result on page load
+/**
+ * Checks for the result of a redirect operation.
+ * Should be called when the app loads.
+ * Returns the user credential on successful sign-in, null otherwise.
+ */
 export const checkRedirectResult = async () => {
   try {
     const result = await getRedirectResult(auth);
     if (result) {
-      console.log('Redirect result processed successfully');
-      return result.user;
+      // User successfully signed in via redirect.
+      console.log("Redirect sign-in successful:", result.user);
+      return result.user; // Return the user object
     }
+    // No redirect result found.
     return null;
   } catch (error) {
-    console.error('Error processing redirect result:', error);
+    // Handle specific errors if needed, e.g., account-exists-with-different-credential
+    console.error("Error processing redirect result:", error);
+    // Re-throw the error to be handled by the AuthContext or UI
     throw error;
   }
 };
 
-// Utility to clear cookies and local/session storage for cache reset
-export function resetUserCache() {
-  // Clear all cookies
-  document.cookie.split(';').forEach((c) => {
-    document.cookie = c
-      .replace(/^ +/, '')
-      .replace(/=.*/, `=;expires=${new Date(0).toUTCString()};path=/`);
-  });
-  // Clear local and session storage
-  localStorage.clear();
-  sessionStorage.clear();
-}
-
-// Updated Google sign-in: use redirect
-export const signInWithGoogle = async () => {
-  const provider = new GoogleAuthProvider();
-  provider.setCustomParameters({
-    prompt: 'select_account', // Optional: customize prompt
-    // Add any other Google-specific parameters if needed
-  });
+/**
+ * Signs out the current user.
+ */
+export const signOutUser = async () => {
   try {
-    // Initiate redirect flow
-    await signInWithRedirect(auth, provider);
-    // Note: signInWithRedirect does not return a result directly here.
-    // The result is handled by getRedirectResult on page load.
+    await signOut(auth);
+    console.log("User signed out successfully.");
   } catch (error) {
-    console.error('Error initiating Google sign-in redirect:', error);
-    // Re-throw the error to be handled by the caller if necessary
+    console.error("Error signing out:", error);
     throw error;
   }
-  // No return value needed here as the page will redirect.
 };
 
-// Modified Apple sign-in: Keep the popup/redirect fallback logic
-export const signInWithApple = async () => {
-  const provider = new OAuthProvider('apple.com');
-  provider.addScope('email');
-  provider.addScope('name');
-  
-  try {
-    console.log('Attempting Apple popup authentication');
-    // Try popup first for Apple
-    const result = await signInWithPopup(auth, provider, browserPopupRedirectResolver);
-    return result; // Return result directly on popup success
-  } catch (error) {
-    // Handle common popup errors or decide to fallback
-    if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
-      console.warn('Apple Popup cancelled by user.');
-      // Don't automatically redirect if user explicitly closed popup
-      throw error; 
-    } else if (error.code === 'auth/operation-not-supported-in-this-environment' || 
-               error.code === 'auth/popup-blocked' ||
-               error.code === 'auth/cors-unsupported') { 
-      // Fallback to redirect if popup is blocked or unsupported
-      console.warn("Apple Popup auth failed, falling back to redirect:", error);
-      auth.tenantId = null; // Ensure tenant ID is null if necessary for redirect
-      try {
-        await signInWithRedirect(auth, provider);
-        // Redirect initiated, no return value needed here.
-      } catch (redirectError) {
-        console.error("Error initiating Apple sign-in redirect:", redirectError);
-        throw redirectError; // Throw redirect initiation error
-      }
-    } else {
-       // Handle other errors (e.g., network, provider errors)
-       console.error("Apple sign-in error:", error);
-       throw error;
-    }
-  }
-};
-
-// Email authentication methods
-export const registerWithEmail = async (email, password) => {
-  return createUserWithEmailAndPassword(auth, email, password);
-};
-
-export const loginWithEmail = async (email, password) => {
-  return signInWithEmailAndPassword(auth, email, password);
-};
-
-// Password management
-export const resetPassword = async (email) => {
-  return sendPasswordResetEmail(auth, email);
-};
-
-export const updateUserEmail = async (user, newEmail) => {
-  return updateEmail(user, newEmail);
-};
-
-export const updateUserPassword = async (user, newPassword) => {
-  return updatePassword(user, newPassword);
-};
-
-// Session management
-export const logOut = async () => {
-  localStorage.removeItem('useRedirectMode');
-  return signOut(auth);
-};
-
-// Auth state observer
-export const subscribeToAuthChanges = (callback) => {
+/**
+ * Subscribes to authentication state changes.
+ * @param {function} callback - The function to call when the auth state changes.
+ * @returns {Unsubscribe} - The unsubscribe function.
+ */
+export const onAuthChange = (callback) => {
   return onAuthStateChanged(auth, callback);
-};
-
-// Legacy aliases for backwards compatibility
-export const loginWithGoogle = signInWithGoogle;
-export const loginWithApple = signInWithApple;
-export const logout = logOut;
-
-// Export auth instance for direct access if needed
-export { auth }; 
+}; 
