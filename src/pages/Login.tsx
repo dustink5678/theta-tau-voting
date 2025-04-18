@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Box,
   Button,
@@ -36,8 +36,8 @@ const Login = () => {
   const navigate = useNavigate();
   const googleButtonRef = useRef<HTMLDivElement>(null); // Ref for the Google button container
 
-  // Google Sign-In Callback
-  const handleGoogleSignIn = async (response: any) => {
+  // Google Sign-In Callback - Wrapped in useCallback
+  const handleGoogleSignIn = useCallback(async (response: any) => {
     setIsLoading(true);
     setErrorMessage(null);
     console.log('Google Sign-In response:', response);
@@ -71,28 +71,34 @@ const Login = () => {
       setErrorMessage('Google Sign-In failed. No credential received.');
       setIsLoading(false);
     }
-  };
+  // Dependencies for useCallback: signInWithGoogleToken, toast
+  }, [signInWithGoogleToken, toast]);
 
   // Initialize Google Identity Services
   useEffect(() => {
+    // Add console log to verify Client ID
     const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+    console.log("Attempting to initialize GSI with Client ID:", googleClientId);
+    
     if (!googleClientId) {
-        console.error("Google Client ID not found. Make sure VITE_GOOGLE_CLIENT_ID is set in your environment variables.");
-        setErrorMessage("Sign-in configuration error. Please contact support.");
-        return;
+      console.error("Google Client ID not found. Make sure VITE_GOOGLE_CLIENT_ID is set in your environment variables.");
+      setErrorMessage("Sign-in configuration error. Please contact support.");
+      return;
     }
 
     // Interval to check for GSI script loading
     const intervalId = setInterval(() => {
       if (window.google?.accounts?.id) {
         clearInterval(intervalId); // Stop polling once loaded
+        console.log("GSI script loaded, initializing...");
         try {
           window.google.accounts.id.initialize({
             client_id: googleClientId,
-            callback: handleGoogleSignIn,
+            callback: handleGoogleSignIn, // Use the memoized callback
           });
 
           if (googleButtonRef.current) {
+            console.log("Rendering GSI button...");
             window.google.accounts.id.renderButton(
               googleButtonRef.current, // Render the button in this div
               { theme: 'outline', size: 'large', width: '300px' } // Customize button appearance
@@ -107,7 +113,8 @@ const Login = () => {
           setErrorMessage("Failed to initialize Google Sign-In.");
         }
       } else {
-        console.log("Waiting for Google Identity Services script...");
+        // Keep this log minimal to avoid flooding
+        // console.log("Waiting for Google Identity Services script...");
       }
     }, 500); // Check every 500ms
 
@@ -118,7 +125,7 @@ const Login = () => {
       // window.google?.accounts?.id?.cancel();
     };
     // Dependencies: Ensure effect runs only once, but handleGoogleSignIn should be stable or wrapped in useCallback if needed
-  }, [handleGoogleSignIn]); // Add handleGoogleSignIn to dependency array (wrap in useCallback if performance becomes an issue)
+  }, [handleGoogleSignIn]); // useEffect depends on the stable handleGoogleSignIn
 
   // Show loading spinner if authentication is in progress
   if (isLoading) {
