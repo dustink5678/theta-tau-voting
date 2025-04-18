@@ -15,6 +15,7 @@ export const signInWithGoogleRedirect = async () => {
   // You can add scopes or custom parameters here if needed
   // provider.addScope('profile');
   // provider.setCustomParameters({ prompt: 'select_account' });
+  console.log("[AuthService] signInWithGoogleRedirect called. Provider created. Attempting Firebase signInWithRedirect...");
   try {
     await signInWithRedirect(auth, provider);
     // Redirect will happen, so no return value needed here.

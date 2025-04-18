@@ -29,8 +29,10 @@ const Login = () => {
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
     setErrorMessage(null);
+    console.log("[Login Page] handleGoogleSignIn called. Attempting to call signInWithGoogle from context...");
     try {
       await signInWithGoogle();
+      console.log("[Login Page] signInWithGoogle call completed (redirect should have started).");
     } catch (error: any) {
       console.error("Google Sign-In Error:", error);
       setErrorMessage(error.message || 'Failed to initiate Google Sign-in. Please try again.');
