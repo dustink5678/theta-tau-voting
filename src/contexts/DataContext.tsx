@@ -1,10 +1,11 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { collection, onSnapshot, Unsubscribe } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { User, Question } from '../types/index';
+import { User as FirestoreUser, Question } from '../types/index';
+import { useAuth } from './AuthContext.tsx';
 
 interface DataContextType {
-  users: User[];
+  users: FirestoreUser[];
   questions: Question[];
   currentQuestion: Question | null;
   isDataLoading: boolean;
@@ -21,12 +22,21 @@ export const useData = () => {
 };
 
 export const DataProvider = ({ children }: { children: ReactNode }) => {
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<FirestoreUser[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
   const [isDataLoading, setIsDataLoading] = useState(true);
+  const { currentUser, loading: authLoading } = useAuth();
 
   useEffect(() => {
+    if (authLoading || !currentUser) {
+      setUsers([]);
+      setQuestions([]);
+      setCurrentQuestion(null);
+      setIsDataLoading(authLoading);
+      return;
+    }
+
     setIsDataLoading(true);
     
     let unsubscribeUsers: Unsubscribe | null = null;
@@ -40,9 +50,11 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         }
     }
 
+    console.log("Setting up Firestore listeners for user:", currentUser.uid);
+
     unsubscribeUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
-      const userData: User[] = snapshot.docs.map((doc) => ({
-        ...(doc.data() as User),
+      const userData: FirestoreUser[] = snapshot.docs.map((doc) => ({
+        ...(doc.data() as FirestoreUser),
         uid: doc.id,
       }));
       setUsers(userData);
@@ -69,10 +81,11 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     });
 
     return () => {
+      console.log("Cleaning up Firestore listeners");
       if (unsubscribeUsers) unsubscribeUsers();
       if (unsubscribeQuestions) unsubscribeQuestions();
     };
-  }, []);
+  }, [currentUser, authLoading]);
 
   return (
     <DataContext.Provider value={{ users, questions, currentQuestion, isDataLoading }}>
