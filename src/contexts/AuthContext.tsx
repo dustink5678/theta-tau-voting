@@ -27,81 +27,68 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<Error | null>(null);
-  const [persistenceReady, setPersistenceReady] = useState<boolean>(false); // New state
 
   console.log("[AuthContext] AuthProvider mounted."); // Log mount
 
-  // Effect 1: Set persistence on mount
+  // Combined effect for persistence and auth state
   useEffect(() => {
-    console.log("[AuthContext] Effect 1: Setting persistence...");
-    setPersistence(auth, browserLocalPersistence)
-      .then(() => {
-        console.log("[AuthContext] Persistence set successfully.");
-        setPersistenceReady(true);
-      })
-      .catch((err) => {
-        console.error("[AuthContext] Failed to set persistence:", err);
-        setError(err instanceof Error ? err : new Error(String(err)));
-        setPersistenceReady(true); // Still mark as ready to allow auth checks, but with potential errors
-      });
-  }, []); // Run only once on mount
-
-  // Effect 2: Handle auth state and redirect result (depends on persistence)
-  useEffect(() => {
-    // Only run this effect if persistence has been set (or failed)
-    if (!persistenceReady) {
-      console.log("[AuthContext] Effect 2: Waiting for persistence...");
-      return; 
-    }
-
-    console.log("[AuthContext] Effect 2: Persistence ready. Running auth checks.");
-    let redirectCheckDone = false;
-    let authStateReceived = false;
+    console.log("[AuthContext] Effect: Starting...");
     let isMounted = true;
+    let unsubscribe = () => {}; // Initialize unsubscribe to a no-op
 
-    const updateLoadingState = () => {
-      if (isMounted && persistenceReady && redirectCheckDone && authStateReceived) {
-        console.log("[AuthContext] All checks complete. Setting loading to false.");
-        setLoading(false);
+    const setupAuth = async () => {
+      console.log("[AuthContext] Effect: Setting persistence...");
+      try {
+        await setPersistence(auth, browserLocalPersistence);
+        console.log("[AuthContext] Persistence set successfully.");
+        
+        if (!isMounted) return; // Check mount status after async operation
+
+        // Now that persistence is set, check redirect and listen for auth changes
+        console.log("[AuthContext] Effect: Calling checkRedirectResult...");
+        try {
+          await checkRedirectResult(); // Wait for redirect check
+          console.log("[AuthContext] checkRedirectResult completed.");
+        } catch (redirectError) {
+          if (isMounted) {
+            console.error("[AuthContext] Redirect check failed:", redirectError);
+            setError(redirectError instanceof Error ? redirectError : new Error(String(redirectError)));
+          }
+        }
+        
+        if (!isMounted) return;
+
+        console.log("[AuthContext] Effect: Subscribing to onAuthChange...");
+        unsubscribe = onAuthChange((user: User | null) => {
+          if (isMounted) {
+            console.log("[AuthContext] onAuthChange triggered. User received:", user);
+            setCurrentUser(user);
+            setError(null); // Clear error on successful auth change (or null user)
+            // Set loading to false ONLY after the first auth state is received
+            console.log("[AuthContext] First auth state received. Setting loading to false.");
+            setLoading(false);
+          }
+        });
+
+      } catch (persistenceError) {
+        if (isMounted) {
+          console.error("[AuthContext] Failed to set persistence:", persistenceError);
+          setError(persistenceError instanceof Error ? persistenceError : new Error(String(persistenceError)));
+          // Still set loading to false even if persistence fails, otherwise app hangs
+          console.log("[AuthContext] Persistence failed. Setting loading to false.");
+          setLoading(false);
+        }
       }
     };
 
-    console.log("[AuthContext] Effect 2: Calling checkRedirectResult...");
-    checkRedirectResult()
-      .then(userFromRedirect => {
-        if (!isMounted) return;
-        console.log("[AuthContext] checkRedirectResult resolved. User from service:", userFromRedirect);
-      })
-      .catch(err => {
-        if (!isMounted) return;
-        console.error("[AuthContext] Redirect check failed in context:", err, err.code, err.message);
-        setError(err instanceof Error ? err : new Error(String(err))); 
-      })
-      .finally(() => {
-        if (!isMounted) return;
-        console.log("[AuthContext] checkRedirectResult finally block.");
-        redirectCheckDone = true;
-        updateLoadingState();
-      });
-
-    console.log("[AuthContext] Effect 2: Subscribing to onAuthChange...");
-    const unsubscribe = onAuthChange((user: User | null) => {
-      if (!isMounted) return;
-      console.log("[AuthContext] onAuthChange triggered. User received:", user);
-      setCurrentUser(user); 
-      if (user) {
-          setError(null);
-      }
-      authStateReceived = true;
-      updateLoadingState(); // Update loading state after receiving auth state
-    });
+    setupAuth();
 
     return () => {
-      console.log("[AuthContext] Unmounting Effect 2. Cleaning up auth listener.");
+      console.log("[AuthContext] Unmounting Effect. Cleaning up auth listener.");
       isMounted = false;
       unsubscribe();
     };
-  }, [persistenceReady]); // Re-run this effect when persistence becomes ready
+  }, []); // Run only once on mount
 
   const value: AuthContextType = {
     currentUser,
