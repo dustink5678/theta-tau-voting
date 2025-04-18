@@ -39,12 +39,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     checkRedirectResult()
       .then(userFromRedirect => {
+        console.log("[AuthContext] checkRedirectResult resolved. User from service:", userFromRedirect);
         if (userFromRedirect) {
-           console.log('User found via redirect result.');
+           console.log("[AuthContext] User details found via redirect result.");
         }
       })
       .catch(err => {
-        console.error('Redirect check failed:', err);
+        console.error("[AuthContext] Redirect check failed in context:", err);
         setError(err instanceof Error ? err : new Error(String(err))); 
       })
       .finally(() => {
@@ -52,8 +53,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         updateLoadingState();
       });
 
-    const unsubscribe = onAuthChange((user: User | null) => { // Add type to user param
-      console.log('Auth state changed, user:', user);
+    const unsubscribe = onAuthChange((user: User | null) => {
+      console.log("[AuthContext] onAuthChange triggered. User received:", user);
       setCurrentUser(user); 
       setError(null); 
       authStateReceived = true;

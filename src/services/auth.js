@@ -32,17 +32,20 @@ export const signInWithGoogleRedirect = async () => {
  */
 export const checkRedirectResult = async () => {
   try {
+    console.log("[AuthService] Calling getRedirectResult..."); // Log before call
     const result = await getRedirectResult(auth);
+    console.log("[AuthService] getRedirectResult raw result:", result); // Log the raw result
     if (result) {
       // User successfully signed in via redirect.
-      console.log("Redirect sign-in successful:", result.user);
+      console.log("[AuthService] Redirect sign-in successful, returning user:", result.user);
       return result.user; // Return the user object
     }
     // No redirect result found.
+    console.log("[AuthService] No redirect result found.");
     return null;
   } catch (error) {
     // Handle specific errors if needed, e.g., account-exists-with-different-credential
-    console.error("Error processing redirect result:", error);
+    console.error("[AuthService] Error processing redirect result:", error);
     // Re-throw the error to be handled by the AuthContext or UI
     throw error;
   }
