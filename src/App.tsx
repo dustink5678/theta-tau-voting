@@ -1,16 +1,14 @@
-import React, { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Box, Flex, ChakraProvider, extendTheme } from '@chakra-ui/react';
+import { AuthProvider } from './contexts/AuthContext';
+import { useAuth } from './contexts/AuthContext';
 import { DataProvider } from './contexts/DataContext';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
+import Login from './pages/Login';
+import AdminPanel from './pages/AdminPanel'
+import UserDashboard from './pages/UserDashboard';
+import PendingVoters from './pages/PendingVoters';
 import LoadingScreen from './components/LoadingScreen';
 import Navbar from './components/Navbar';
-
-// Dynamically import page components
-const Login = lazy(() => import('./pages/Login'));
-const AdminPanel = lazy(() => import('./pages/AdminPanel'));
-const UserDashboard = lazy(() => import('./pages/UserDashboard'));
-const PendingVoters = lazy(() => import('./pages/PendingVoters'));
 
 // Create a custom maroon theme
 const theme = extendTheme({
@@ -43,23 +41,22 @@ const theme = extendTheme({
 });
 
 const PrivateRoute = ({ children, adminOnly = false }: { children: React.ReactNode; adminOnly?: boolean }) => {
-  const { currentUser, loading } = useAuth();
-
+  const { user, loading } = useAuth() as any;
+  
   if (loading) {
     return <LoadingScreen />;
   }
 
-  if (!currentUser) {
+  if (!user) {
     return <Navigate to="/login" replace />;
   }
 
-  const isAdmin = currentUser?.email === 'admin@example.com';
-
-  if (adminOnly && !isAdmin) {
+  if (adminOnly && user.role !== 'admin') {
     return <Navigate to="/dashboard" replace />;
   }
 
-  const contentMinHeight = isAdmin ? 'calc(100vh - 98px)' : 'calc(100vh - 56px)';
+  // Calculate content height based on whether user is admin (with tabs) or not
+  const contentMinHeight = user.role === 'admin' ? 'calc(100vh - 98px)' : 'calc(100vh - 56px)';
 
   return (
     <Flex direction="column" width="100vw" minH="100vh">
@@ -72,15 +69,15 @@ const PrivateRoute = ({ children, adminOnly = false }: { children: React.ReactNo
 };
 
 const PublicRoute = ({ children }: { children: React.ReactNode }) => {
-  const { currentUser, loading } = useAuth();
-
+  const { user, loading } = useAuth() as any;
+  
   if (loading) {
     return <LoadingScreen />;
   }
-
-  if (currentUser) {
-    const isAdmin = currentUser?.email === 'admin@example.com';
-    return isAdmin 
+  
+  // If user is authenticated, redirect them immediately
+  if (user) {
+    return user.role === 'admin' 
       ? <Navigate to="/admin" replace /> 
       : <Navigate to="/dashboard" replace />;
   }
@@ -92,57 +89,61 @@ const PublicRoute = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
+// MODIFY THIS COMPONENT:
 const AppContent = () => {
+  const { user, loading } = useAuth() as any;
+  
+  // Show loading screen while determining authentication state
+  if (loading) {
+    return <LoadingScreen />;
+  }
+  
   return (
     <Flex direction="column" width="100vw" minH="100vh" maxW="100vw" overflow="hidden">
-      <Suspense fallback={<LoadingScreen />}>
-        <Routes>
-          <Route path="/login" element={
+      <Routes>
+        <Route path="/login" element={
+          <PublicRoute>
+            <Login />
+          </PublicRoute>
+        } />
+        <Route
+          path="/admin"
+          element={
+            <PrivateRoute adminOnly>
+              <AdminPanel />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/dashboard"
+          element={
+            <PrivateRoute>
+              <UserDashboard />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/pending"
+          element={
             <PublicRoute>
-              <Login />
+              <PendingVoters />
             </PublicRoute>
-          } />
-          <Route
-            path="/admin/*"
-            element={ 
-              <PrivateRoute adminOnly>
-                <Routes>
-                  <Route index element={<AdminPanel />} />
-                  <Route path="pending" element={<PendingVoters />} />
-                </Routes>
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/dashboard"
-            element={
-              <PrivateRoute>
-                <UserDashboard />
-              </PrivateRoute>
-            }
-          />
-          <Route path="/" element={<RootRedirect />} />
-        </Routes>
-      </Suspense>
+          }
+        />
+        <Route path="/" element={
+          loading ? (
+            <LoadingScreen />
+          ) : user?.role === 'admin' ? (
+            <Navigate to="/admin" replace /> 
+          ) : (
+            <Navigate to="/dashboard" replace />
+          )
+        } />
+      </Routes>
     </Flex>
   );
 };
 
-const RootRedirect = () => {
-  const { currentUser, loading } = useAuth();
-
-  if (loading) {
-    return <LoadingScreen />;
-  }
-
-  if (!currentUser) {
-    return <Navigate to="/login" replace />;
-  }
-
-  const isAdmin = currentUser?.email === 'admin@example.com';
-
-  return isAdmin ? <Navigate to="/admin" replace /> : <Navigate to="/dashboard" replace />;
-};
 
 const App = () => {
   return (

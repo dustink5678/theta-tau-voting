@@ -1,4 +1,4 @@
-import { useState, useEffect /*, useRef, useCallback */ } from 'react'; // Remove GSI-related imports
+import { useState, useEffect } from 'react';
 import {
   Box,
   Button,
@@ -16,69 +16,102 @@ import {
   AlertDescription,
   CloseButton,
 } from '@chakra-ui/react';
-import { FcGoogle } from 'react-icons/fc'; // Re-add icon for the button
+import { FcGoogle } from 'react-icons/fc';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import thetaTauLogo from '../assets/logo.png';
 
-// Remove GSI global declaration
-// declare global { ... }
-
 const Login = () => {
-  // Use signInWithGoogle from context
-  const { signInWithGoogle, loading: authLoading } = useAuth(); 
-  // Optional: Local loading state specifically for the button click action 
-  // if needed, separate from global authLoading
-  const [isSigningIn, setIsSigningIn] = useState(false); 
+  const { signInWithGoogle, resetUserCache, signOut, user } = useAuth() as any;
+  const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const toast = useToast();
   const navigate = useNavigate();
-  // Remove GSI button ref
-  // const googleButtonRef = useRef<HTMLDivElement>(null);
 
-  // Remove GSI callback
-  // const handleGoogleSignIn = useCallback(async (response: any) => { ... }, [...]);
+  // Effect for checking existing user and redirect
+  useEffect(() => {
+    if (user) {
+      // @ts-ignore
+      if (user.role === 'admin') {
+        navigate('/admin');
+      // @ts-ignore
+      } else if (user.verified) {
+        navigate('/dashboard');
+      } else {
+        toast({
+          title: 'Account pending verification',
+          description: 'Your account requires verification by an administrator.',
+          status: 'info',
+          duration: 5000,
+          isClosable: true,
+        });
+      }
+    }
+  }, [user, navigate, toast]);
 
-  // Remove GSI initialization useEffect
-  // useEffect(() => { ... }, [handleGoogleSignIn]);
-
-  // New handler for the Chakra Button
-  const handleLoginClick = async () => {
-    setIsSigningIn(true);
+  // Handle Google sign-in button click
+  const handleGoogleSignIn = async () => {
+    setIsLoading(true);
     setErrorMessage(null);
     try {
       await signInWithGoogle();
-      // Success is handled by onAuthStateChanged and App routing
-      // No navigation needed here
-      toast({
-        title: 'Redirecting for sign-in...',
-        status: 'info',
-        duration: 3000,
-        isClosable: true,
-      });
     } catch (error: any) {
-      console.error("Sign-In Error:", error);
-      let message = error.message || 'An error occurred during sign-in.';
-      // Handle specific errors shown to the user
-      if (error.code === 'auth/account-exists-with-different-credential') {
-        message = 'An account already exists with the same email address but different sign-in credentials. Try signing in using the original method.';
-      } else if (error.code) { // Use error code if available
-        message = `Sign-in failed: ${error.code.replace('auth/','').replace(/-/g,' ')}`;
-      } else { 
-        message = 'Failed to sign in. Please check your connection and try again.';
-      }
-      setErrorMessage(message);
+      handleAuthError(error, 'Google');
     } finally {
-      setIsSigningIn(false);
+      setIsLoading(false);
     }
   };
 
-  // Use the global auth loading state for the main loading screen
-  if (authLoading && !isSigningIn) { // Show global loader unless actively clicking sign-in
+  // Handle Reset Session button click
+  const handleResetSession = async () => {
+    setIsLoading(true);
+    setErrorMessage(null);
+    try {
+      resetUserCache();
+      await signOut();
+      toast({
+        title: 'Session Reset',
+        description: 'Your session and cache have been cleared. Please try signing in again.',
+        status: 'success',
+        duration: 5000,
+        isClosable: true,
+      });
+    } catch (error: any) {
+      setErrorMessage('Failed to reset session. Please reload the page.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Helper for error handling
+  const handleAuthError = (error: any, provider: string) => {
+    console.error(`Error starting ${provider} sign-in:`, error);
+    let errorMsg = `${provider} authentication failed. Please try again.`;
+    if (error.code === 'auth/network-request-failed') {
+      errorMsg = 'Network error. This may be caused by content blockers or privacy settings. Try disabling ad blockers or using incognito mode.';
+    } else if (error.code === 'auth/web-storage-unsupported' || error.code === 'auth/storage-unavailable') {
+      errorMsg = 'Your browser has disabled cookies or storage. Please enable them for this site or try a different browser.';
+    } else if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user') {
+      errorMsg = 'Authentication popup was blocked or closed. Please allow popups for this site.';
+    } else if (error.message) {
+      errorMsg = error.message;
+    }
+    setErrorMessage(errorMsg);
+    toast({
+      title: `${provider} Authentication Error`,
+      description: errorMsg,
+      status: 'error',
+      duration: 7000,
+      isClosable: true,
+    });
+  };
+
+  // Show loading spinner if authentication is in progress
+  if (isLoading) {
     return (
       <Box 
         width="100%" 
-        minH="calc(100vh)" 
+        minH="calc(100vh - 56px)" 
         display="flex" 
         alignItems="center" 
         justifyContent="center"
@@ -87,7 +120,7 @@ const Login = () => {
           <VStack spacing={4}>
             <Spinner size="xl" color="blue.500" thickness="4px" />
             <Text>
-              Loading...
+              {'Processing, please wait...'}
             </Text>
           </VStack>
         </Center>
@@ -98,7 +131,7 @@ const Login = () => {
   return (
     <Box 
       width="100%" 
-      minH="calc(100vh)"
+      minH="calc(100vh - 56px)" 
       bg="gray.50" 
       display="flex" 
       alignItems="center" 
@@ -143,24 +176,36 @@ const Login = () => {
             />
           </Alert>
         )}
-
-        {/* Replace GSI button container with Chakra Button */}
-        {/* <Box ref={googleButtonRef} mb={4} display="flex" justifyContent="center" /> */}
-        <Button 
-          leftIcon={<FcGoogle />} 
-          onClick={handleLoginClick} 
-          isLoading={isSigningIn} // Use local loading state for button feedback
-          loadingText="Signing In"
-          colorScheme="blue" 
-          variant="outline" 
-          width="full" 
-          size="lg"
-          mb={4}
-          disabled={authLoading} // Disable if global auth is already processing
-        >
-          Sign in with Google
-        </Button>
-
+        
+        <VStack spacing={4} width="100%">
+          <Button
+            size="lg"
+            colorScheme="blue"
+            onClick={handleGoogleSignIn}
+            width="100%"
+            leftIcon={<FcGoogle size={20} />}
+            isLoading={isLoading}
+          >
+            Sign in with Google
+          </Button>
+          <Button
+            size="md"
+            variant="outline"
+            colorScheme="gray"
+            onClick={handleResetSession}
+            width="100%"
+            isLoading={isLoading}
+          >
+            Reset Session / Clear Cache
+          </Button>
+        </VStack>
+        
+        <Text mt={6} fontSize="sm" color="gray.500" textAlign="center">
+          This site works best in Chrome, Firefox, Edge, or Safari with cookies and JavaScript enabled.<br />
+          {/*
+            COOP warning: You may see a 'Cross-Origin-Opener-Policy policy would block the window.close call.' warning in the console after sign-in. This is expected with modern browser security and Firebase popups, and does not affect functionality.
+          */}
+        </Text>
       </Flex>
     </Box>
   );
