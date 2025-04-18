@@ -1,11 +1,27 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { getAuth, onAuthStateChanged, signOut as firebaseSignOut, User, GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
+import { 
+  getAuth, 
+  onAuthStateChanged, 
+  signOut as firebaseSignOut, 
+  User, 
+  GoogleAuthProvider, 
+  signInWithPopup,
+  signInWithRedirect
+} from 'firebase/auth';
 import { auth } from '../config/firebase'; // Assuming auth is exported from your firebase config
+
+// Configure Google Provider outside the component for reuse
+const googleProvider = new GoogleAuthProvider();
+googleProvider.addScope('profile');
+googleProvider.addScope('email');
+googleProvider.setCustomParameters({
+  prompt: 'select_account' // Forces account selection even if already logged in
+});
 
 interface AuthContextType {
   currentUser: User | null;
   loading: boolean;
-  signInWithGoogleToken: (idToken: string) => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   // Add other auth methods or user properties if needed
 }
@@ -33,10 +49,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setCurrentUser(user);
       setLoading(false);
       if (user) {
-        console.log("User logged in:", user.uid);
-        // Optionally fetch additional user profile data here
+        console.log("Auth State Changed - User logged in:", user.uid);
       } else {
-        console.log("User logged out");
+        console.log("Auth State Changed - User logged out");
       }
     });
 
@@ -48,35 +63,42 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       setLoading(true);
       await firebaseSignOut(auth);
-      // User state will be updated by onAuthStateChanged
+      // currentUser will become null via onAuthStateChanged
     } catch (error) {
       console.error("Error signing out:", error);
-      // Handle sign-out errors appropriately
-    } finally {
-      // setLoading(false); // Loading state is handled by onAuthStateChanged
+      setLoading(false); // Ensure loading resets on error
     }
   };
 
-  const signInWithGoogleToken = async (idToken: string) => {
+  const signInWithGoogle = async () => {
     setLoading(true);
     try {
-      const credential = GoogleAuthProvider.credential(idToken);
-      await signInWithCredential(auth, credential);
-      // User state will be updated by onAuthStateChanged upon successful sign-in
-      console.log("Successfully signed in with Google credential");
-    } catch (error) {
-      console.error("Error signing in with Google credential:", error);
-      // Rethrow the error so the calling component (Login) can handle it
-      throw error; 
-    } finally {
-       // setLoading(false); // Let onAuthStateChanged handle final loading state
+      await signInWithPopup(auth, googleProvider);
+      console.log("Sign in with popup successful");
+    } catch (error: any) {
+      console.error("Popup Sign-in Error:", error);
+      if (error.code === 'auth/popup-blocked' || 
+          error.code === 'auth/popup-closed-by-user' ||
+          error.code === 'auth/cancelled-popup-request') {
+        console.log("Popup failed, attempting redirect...");
+        try {
+          await signInWithRedirect(auth, googleProvider);
+        } catch (redirectError) {
+          console.error("Redirect Sign-in Error:", redirectError);
+          setLoading(false);
+          throw redirectError;
+        }
+      } else {
+        setLoading(false);
+        throw error;
+      }
     }
   };
 
   const value = {
     currentUser,
     loading,
-    signInWithGoogleToken,
+    signInWithGoogle,
     signOut,
   };
 

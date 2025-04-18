@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect /*, useRef, useCallback */ } from 'react'; // Remove GSI-related imports
 import {
   Box,
   Button,
@@ -16,123 +16,69 @@ import {
   AlertDescription,
   CloseButton,
 } from '@chakra-ui/react';
-// import { FcGoogle } from 'react-icons/fc'; // No longer needed for the button
-import { useAuth } from '../contexts/AuthContext'; // Import the new context hook
+import { FcGoogle } from 'react-icons/fc'; // Re-add icon for the button
+import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import thetaTauLogo from '../assets/logo.png';
 
-// Declare the google object from the GSI script
-declare global {
-  interface Window {
-    google: any;
-  }
-}
+// Remove GSI global declaration
+// declare global { ... }
 
 const Login = () => {
-  const { signInWithGoogleToken } = useAuth(); // Get the sign-in function
-  const [isLoading, setIsLoading] = useState(false); // Still useful for the initial GIS button rendering/click
+  // Use signInWithGoogle from context
+  const { signInWithGoogle, loading: authLoading } = useAuth(); 
+  // Optional: Local loading state specifically for the button click action 
+  // if needed, separate from global authLoading
+  const [isSigningIn, setIsSigningIn] = useState(false); 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const toast = useToast();
   const navigate = useNavigate();
-  const googleButtonRef = useRef<HTMLDivElement>(null); // Ref for the Google button container
+  // Remove GSI button ref
+  // const googleButtonRef = useRef<HTMLDivElement>(null);
 
-  // Google Sign-In Callback - Wrapped in useCallback
-  const handleGoogleSignIn = useCallback(async (response: any) => {
-    setIsLoading(true);
+  // Remove GSI callback
+  // const handleGoogleSignIn = useCallback(async (response: any) => { ... }, [...]);
+
+  // Remove GSI initialization useEffect
+  // useEffect(() => { ... }, [handleGoogleSignIn]);
+
+  // New handler for the Chakra Button
+  const handleLoginClick = async () => {
+    setIsSigningIn(true);
     setErrorMessage(null);
-    console.log('Google Sign-In response:', response);
-    if (response.credential) {
-      try {
-        await signInWithGoogleToken(response.credential); // Pass the ID token to AuthContext
-        // Navigation should be handled by AuthContext's onAuthStateChanged listener
-        // and the routing logic in App.tsx
-        toast({
-          title: 'Sign-in successful',
-          status: 'success',
-          duration: 3000,
-          isClosable: true,
-        });
-      } catch (error: any) {
-        console.error("Firebase Sign-In Error:", error);
-        // Handle specific Firebase errors if needed
-        let message = error.message || 'An error occurred during Firebase sign-in.';
-        if (error.code === 'auth/user-disabled') {
-          message = 'Your account has been disabled.';
-        } else if (error.code === 'auth/popup-closed-by-user') {
-            message = 'Sign-in cancelled.'; // Example
-        }
-        // Consider specific handling for 'auth/account-exists-with-different-credential' if merging accounts isn't desired
-        setErrorMessage(message);
-      } finally {
-        setIsLoading(false);
+    try {
+      await signInWithGoogle();
+      // Success is handled by onAuthStateChanged and App routing
+      // No navigation needed here
+      toast({
+        title: 'Redirecting for sign-in...',
+        status: 'info',
+        duration: 3000,
+        isClosable: true,
+      });
+    } catch (error: any) {
+      console.error("Sign-In Error:", error);
+      let message = error.message || 'An error occurred during sign-in.';
+      // Handle specific errors shown to the user
+      if (error.code === 'auth/account-exists-with-different-credential') {
+        message = 'An account already exists with the same email address but different sign-in credentials. Try signing in using the original method.';
+      } else if (error.code) { // Use error code if available
+        message = `Sign-in failed: ${error.code.replace('auth/','').replace(/-/g,' ')}`;
+      } else { 
+        message = 'Failed to sign in. Please check your connection and try again.';
       }
-    } else {
-      console.error("Google Sign-In failed:", response);
-      setErrorMessage('Google Sign-In failed. No credential received.');
-      setIsLoading(false);
+      setErrorMessage(message);
+    } finally {
+      setIsSigningIn(false);
     }
-  // Dependencies for useCallback: signInWithGoogleToken, toast
-  }, [signInWithGoogleToken, toast]);
+  };
 
-  // Initialize Google Identity Services
-  useEffect(() => {
-    // Add console log to verify Client ID
-    const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-    console.log("Attempting to initialize GSI with Client ID:", googleClientId);
-    
-    if (!googleClientId) {
-      console.error("Google Client ID not found. Make sure VITE_GOOGLE_CLIENT_ID is set in your environment variables.");
-      setErrorMessage("Sign-in configuration error. Please contact support.");
-      return;
-    }
-
-    // Interval to check for GSI script loading
-    const intervalId = setInterval(() => {
-      if (window.google?.accounts?.id) {
-        clearInterval(intervalId); // Stop polling once loaded
-        console.log("GSI script loaded, initializing...");
-        try {
-          window.google.accounts.id.initialize({
-            client_id: googleClientId,
-            callback: handleGoogleSignIn, // Use the memoized callback
-          });
-
-          if (googleButtonRef.current) {
-            console.log("Rendering GSI button...");
-            window.google.accounts.id.renderButton(
-              googleButtonRef.current, // Render the button in this div
-              { theme: 'outline', size: 'large', width: '300px' } // Customize button appearance
-            );
-          } else {
-            console.warn("Google button ref not available when GSI loaded.");
-          }
-          // Display the One Tap prompt if needed (optional)
-          // window.google.accounts.id.prompt(); 
-        } catch (error) {
-          console.error("Error initializing Google Sign-In:", error);
-          setErrorMessage("Failed to initialize Google Sign-In.");
-        }
-      } else {
-        // Keep this log minimal to avoid flooding
-        // console.log("Waiting for Google Identity Services script...");
-      }
-    }, 500); // Check every 500ms
-
-    // Cleanup function: clear the interval if the component unmounts
-    return () => {
-      clearInterval(intervalId);
-      // Optional: If using One Tap, might need to cancel it
-      // window.google?.accounts?.id?.cancel();
-    };
-    // Dependencies: Ensure effect runs only once, but handleGoogleSignIn should be stable or wrapped in useCallback if needed
-  }, [handleGoogleSignIn]); // useEffect depends on the stable handleGoogleSignIn
-
-  // Show loading spinner if authentication is in progress
-  if (isLoading) {
+  // Use the global auth loading state for the main loading screen
+  if (authLoading && !isSigningIn) { // Show global loader unless actively clicking sign-in
     return (
       <Box 
         width="100%" 
-        minH="calc(100vh - 56px)" // Assuming 56px is navbar height
+        minH="calc(100vh)" 
         display="flex" 
         alignItems="center" 
         justifyContent="center"
@@ -141,7 +87,7 @@ const Login = () => {
           <VStack spacing={4}>
             <Spinner size="xl" color="blue.500" thickness="4px" />
             <Text>
-              {'Signing in...'}
+              Loading...
             </Text>
           </VStack>
         </Center>
@@ -152,7 +98,7 @@ const Login = () => {
   return (
     <Box 
       width="100%" 
-      minH="calc(100vh)" // Use full viewport height for login page
+      minH="calc(100vh)"
       bg="gray.50" 
       display="flex" 
       alignItems="center" 
@@ -198,10 +144,23 @@ const Login = () => {
           </Alert>
         )}
 
-        {/* Container for the Google Sign-In Button */}
-        <Box ref={googleButtonRef} mb={4} display="flex" justifyContent="center" />
+        {/* Replace GSI button container with Chakra Button */}
+        {/* <Box ref={googleButtonRef} mb={4} display="flex" justifyContent="center" /> */}
+        <Button 
+          leftIcon={<FcGoogle />} 
+          onClick={handleLoginClick} 
+          isLoading={isSigningIn} // Use local loading state for button feedback
+          loadingText="Signing In"
+          colorScheme="blue" 
+          variant="outline" 
+          width="full" 
+          size="lg"
+          mb={4}
+          disabled={authLoading} // Disable if global auth is already processing
+        >
+          Sign in with Google
+        </Button>
 
-        {/* Add any other necessary content for the login page */}
       </Flex>
     </Box>
   );
