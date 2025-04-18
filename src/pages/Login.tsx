@@ -32,6 +32,7 @@ const Login = () => {
   const { signInWithGoogleToken } = useAuth(); // Get the sign-in function
   const [isLoading, setIsLoading] = useState(false); // Still useful for the initial GIS button rendering/click
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isGsiLoaded, setIsGsiLoaded] = useState(false); // State to track GSI script loading
   const toast = useToast();
   const navigate = useNavigate();
   const googleButtonRef = useRef<HTMLDivElement>(null); // Ref for the Google button container
@@ -82,30 +83,43 @@ const Login = () => {
         return;
     }
 
-    if (window.google?.accounts?.id) {
-      window.google.accounts.id.initialize({
-        client_id: googleClientId,
-        callback: handleGoogleSignIn,
-      });
-
-      if (googleButtonRef.current) {
-        window.google.accounts.id.renderButton(
-          googleButtonRef.current, // Render the button in this div
-          { theme: 'outline', size: 'large', width: '300px' } // Customize button appearance
-        );
-      }
-       window.google.accounts.id.prompt(); // Optional: display the One Tap prompt
+    // Check if the script is loaded
+    if (typeof window.google !== 'undefined' && window.google?.accounts?.id) {
+        console.log("GSI script loaded, initializing...");
+        try {
+            window.google.accounts.id.initialize({
+                client_id: googleClientId,
+                callback: handleGoogleSignIn,
+            });
+            setIsGsiLoaded(true); // Mark as loaded *before* rendering button
+        } catch (error) {
+            console.error("Error initializing Google Sign-In:", error);
+            setErrorMessage("Failed to initialize Google Sign-In.");
+        }
     } else {
-      console.log("Google Identity Services script not loaded yet.");
-      // Optionally add a small delay and retry, or display a message
+      console.error("Google Identity Services script not loaded when component mounted.");
+      // You could implement a retry mechanism here if needed, e.g., using setTimeout
+      // For now, we'll just show an error if it wasn't loaded initially.
+      setErrorMessage("Sign-in service failed to load. Please refresh.");
     }
-
-    // Cleanup function if needed (though GSI manages its state)
-    return () => {
-      // Potentially hide prompt if component unmounts?
-      // window.google?.accounts?.id?.cancel();
-    };
   }, []); // Run only once on mount
+
+  // Effect to render the button *after* GSI is loaded and the ref is available
+  useEffect(() => {
+    if (isGsiLoaded && googleButtonRef.current) {
+      try {
+        window.google.accounts.id.renderButton(
+          googleButtonRef.current, 
+          { theme: 'outline', size: 'large', type: 'standard', shape: 'rectangular', width: '300px' } // Customization
+        );
+        // Consider calling prompt() here if you want One Tap prompt *after* button renders
+        // window.google.accounts.id.prompt();
+      } catch (error) {
+        console.error("Error rendering Google Sign-In button:", error);
+        setErrorMessage("Failed to render Google Sign-In button.");
+      }
+    }
+  }, [isGsiLoaded]); // Run when GSI load state changes
 
   // Show loading spinner if authentication is in progress
   if (isLoading) {
@@ -178,10 +192,19 @@ const Login = () => {
           </Alert>
         )}
 
-        {/* Container for the Google Sign-In Button */}
-        <Box ref={googleButtonRef} mb={4} display="flex" justifyContent="center" />
-
-        {/* Add any other necessary content for the login page */}
+        {/* Container for the Google Sign-In Button */} 
+        {/* Render the container only when GSI is loaded, button renders inside */} 
+        <Box 
+            ref={googleButtonRef} 
+            mb={4} 
+            display="flex" 
+            justifyContent="center" 
+            minH="40px" // Add min height to prevent layout shift before button renders
+        />
+        {!isGsiLoaded && !errorMessage && (
+            <Text color="gray.500" fontSize="sm">Loading Sign-in options...</Text>
+        )}
+        
       </Flex>
     </Box>
   );
