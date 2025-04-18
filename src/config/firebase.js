@@ -1,6 +1,6 @@
 // Firebase configuration with modular SDK
 import { initializeApp } from 'firebase/app';
-import { getAuth, connectAuthEmulator } from 'firebase/auth';
+import { getAuth, connectAuthEmulator, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
 import { getAnalytics, isSupported } from 'firebase/analytics';
 
@@ -27,6 +27,16 @@ try {
 
 // Initialize Firebase services with error handling
 const auth = getAuth(firebaseApp);
+
+// Set persistence IMMEDIATELY after getting the auth instance
+setPersistence(auth, browserLocalPersistence)
+  .then(() => {
+    console.log('[FirebaseConfig] Auth persistence set to local.');
+  })
+  .catch((error) => {
+    console.error('[FirebaseConfig] Error setting auth persistence:', error);
+  });
+
 const db = getFirestore(firebaseApp);
 
 // Initialize Analytics conditionally to handle privacy blockers
