@@ -14,6 +14,8 @@ const firebaseConfig = {
   measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID || import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
+console.log("[FirebaseConfig] Using config:", firebaseConfig); // Log the actual config object
+
 // Initialize Firebase with error handling
 let firebaseApp;
 try {

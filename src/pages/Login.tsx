@@ -17,24 +17,26 @@ import {
   CloseButton,
 } from '@chakra-ui/react';
 import { FcGoogle } from 'react-icons/fc';
-import { useAuth } from '../contexts/AuthContext.jsx';
+import { useAuth } from '../contexts/AuthContext.tsx';
 import thetaTauLogo from '../assets/logo.png';
 
 const Login = () => {
-  const { signInWithGoogle, loading: authLoading, error: authError } = useAuth();
+  const { signInWithGoogle, loading: authLoading, error: authError, currentUser } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const toast = useToast();
 
+  console.log(`[Login Page] Render. Auth Loading: ${authLoading}, Current User: ${!!currentUser}, Auth Error:`, authError);
+
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
     setErrorMessage(null);
-    console.log("[Login Page] handleGoogleSignIn called. Attempting to call signInWithGoogle from context...");
+    console.log("[Login Page] handleGoogleSignIn called.");
     try {
       await signInWithGoogle();
-      console.log("[Login Page] signInWithGoogle call completed (redirect should have started).");
+      console.log("[Login Page] signInWithGoogle promise resolved (redirect initiated.)");
     } catch (error: any) {
-      console.error("Google Sign-In Error:", error);
+      console.error("[Login Page] Google Sign-In Error caught:", error.code, error.message, error);
       setErrorMessage(error.message || 'Failed to initiate Google Sign-in. Please try again.');
       toast({
         title: 'Sign-in Error',

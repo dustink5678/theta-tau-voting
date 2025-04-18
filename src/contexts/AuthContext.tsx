@@ -24,51 +24,64 @@ const AuthContext = createContext<AuthContextType | null>(null);
  */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  // Start loading as true, but rely on onAuthChange for the primary loading signal
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<Error | null>(null);
 
-  useEffect(() => {
-    // Flag to prevent setting loading false too early if redirect check is slow
-    let redirectCheckInProgress = true; 
+  console.log("[AuthContext] AuthProvider mounted."); // Log mount
 
-    // Check redirect result, but don't block the main loading state on it.
-    // onAuthStateChanged should handle the user state after redirect.
+  useEffect(() => {
+    console.log("[AuthContext] useEffect running."); // Log effect run
+    let redirectCheckDone = false;
+    let authStateReceived = false;
+    let isMounted = true; // Track mount status for async operations
+
+    const updateLoadingState = () => {
+      // Only update state if the component is still mounted
+      if (isMounted && redirectCheckDone && authStateReceived) {
+        console.log("[AuthContext] Both checks complete. Setting loading to false.");
+        setLoading(false);
+      }
+    };
+
+    console.log("[AuthContext] Calling checkRedirectResult...");
     checkRedirectResult()
       .then(userFromRedirect => {
+        if (!isMounted) return;
         console.log("[AuthContext] checkRedirectResult resolved. User from service:", userFromRedirect);
-        // We don't necessarily need to do anything with the user here,
-        // as onAuthChange should fire shortly after if sign-in was successful.
+        if (userFromRedirect) {
+           console.log("[AuthContext] User details found via redirect result.");
+        }
       })
       .catch(err => {
-        console.error("[AuthContext] Redirect check failed in context:", err);
-        // Only set error if auth hasn't loaded a user yet
-        if (!currentUser) { 
-            setError(err instanceof Error ? err : new Error(String(err)));
-        } 
+        if (!isMounted) return;
+        console.error("[AuthContext] Redirect check failed in context:", err, err.code, err.message);
+        setError(err instanceof Error ? err : new Error(String(err))); 
       })
       .finally(() => {
-        redirectCheckInProgress = false;
-        // If onAuthChange has already run and set user to null, 
-        // we might be done loading here if redirect also failed.
-        // However, let's primarily let onAuthChange control the loading flag.
-        console.log("[AuthContext] Redirect check finished.");
+        if (!isMounted) return;
+        console.log("[AuthContext] checkRedirectResult finally block.");
+        redirectCheckDone = true;
+        updateLoadingState();
       });
 
-    // Subscribe to auth state changes - THIS is the primary source of truth.
+    console.log("[AuthContext] Subscribing to onAuthChange...");
     const unsubscribe = onAuthChange((user: User | null) => {
+      if (!isMounted) return;
       console.log("[AuthContext] onAuthChange triggered. User received:", user);
-      setCurrentUser(user);
-      setError(null); // Clear any previous error on successful auth state change
-      
-      // Regardless of user being null or an object, the auth state is now known.
-      // We might wait briefly for redirect check if it's still running, but 
-      // generally, onAuthChange means Firebase has initialized its state.
-      setLoading(false); 
+      setCurrentUser(user); 
+      if (user) {
+          setError(null); // Clear error only if user is successfully authenticated
+      }
+      authStateReceived = true;
+      updateLoadingState();
     });
 
     // Cleanup subscription on unmount
-    return () => unsubscribe();
+    return () => {
+      console.log("[AuthContext] Unmounting. Cleaning up auth listener.");
+      isMounted = false;
+      unsubscribe();
+    };
   }, []);
 
   const value: AuthContextType = {

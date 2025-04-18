@@ -15,13 +15,12 @@ export const signInWithGoogleRedirect = async () => {
   // You can add scopes or custom parameters here if needed
   // provider.addScope('profile');
   // provider.setCustomParameters({ prompt: 'select_account' });
-  console.log("[AuthService] signInWithGoogleRedirect called. Provider created. Attempting Firebase signInWithRedirect...");
   try {
+    console.log("[AuthService] Attempting signInWithRedirect. Auth instance:", auth); // Log auth instance
     await signInWithRedirect(auth, provider);
-    // Redirect will happen, so no return value needed here.
+    console.log("[AuthService] signInWithRedirect called, redirect should occur.");
   } catch (error) {
-    console.error("Error initiating Google Sign-In redirect:", error);
-    // Re-throw the error to be handled by the UI
+    console.error("[AuthService] Error during signInWithRedirect initiation:", error.code, error.message, error);
     throw error;
   }
 };
@@ -33,21 +32,21 @@ export const signInWithGoogleRedirect = async () => {
  */
 export const checkRedirectResult = async () => {
   try {
-    console.log("[AuthService] Calling getRedirectResult..."); // Log before call
+    console.log("[AuthService] Calling getRedirectResult... Auth persistence:", auth.persistence);
     const result = await getRedirectResult(auth);
-    console.log("[AuthService] getRedirectResult raw result:", result); // Log the raw result
+    console.log("[AuthService] getRedirectResult raw result:", result);
     if (result) {
-      // User successfully signed in via redirect.
       console.log("[AuthService] Redirect sign-in successful, returning user:", result.user);
-      return result.user; // Return the user object
+      return result.user;
     }
-    // No redirect result found.
     console.log("[AuthService] No redirect result found.");
     return null;
   } catch (error) {
-    // Handle specific errors if needed, e.g., account-exists-with-different-credential
-    console.error("[AuthService] Error processing redirect result:", error);
-    // Re-throw the error to be handled by the AuthContext or UI
+    console.error("[AuthService] Error processing redirect result:", error.code, error.message, error);
+    // Log specific details for common redirect errors
+    if (error.code === 'auth/account-exists-with-different-credential') {
+      console.error("[AuthService] Redirect Error Detail: Account exists with different credential. Email:", error.customData?.email, "Credential:", error.credential);
+    }
     throw error;
   }
 };
