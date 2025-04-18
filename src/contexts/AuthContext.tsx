@@ -1,102 +1,91 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { 
-  signInWithGoogleRedirect,
-  checkRedirectResult,
-  onAuthChange,
-  signOutUser,
-} from '../services/auth.js'; // Keep .js extension if service file is JS
-import { User } from 'firebase/auth'; // Import User type
+import { getAuth, onAuthStateChanged, signOut as firebaseSignOut, User, GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
+import { auth } from '../config/firebase'; // Assuming auth is exported from your firebase config
 
-// Define type for context value
 interface AuthContextType {
-  currentUser: User | null; // Use imported User type
+  currentUser: User | null;
   loading: boolean;
-  error: Error | null;
-  signInWithGoogle: () => Promise<void>;
+  signInWithGoogleToken: (idToken: string) => Promise<void>;
   signOut: () => Promise<void>;
+  // Add other auth methods or user properties if needed
 }
 
-// Create the context with the defined type
-const AuthContext = createContext<AuthContextType | null>(null);
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-/**
- * Provides authentication state and methods.
- */
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<Error | null>(null);
-
-  console.log("[AuthContext] AuthProvider mounted."); // Log mount
-
-  // Effect for auth state and redirect check (NO persistence setting)
-  useEffect(() => {
-    console.log("[AuthContext] Effect: Starting...");
-    let isMounted = true;
-    let unsubscribe = () => {}; // Initialize unsubscribe to a no-op
-
-    const checkAuth = async () => {
-      console.log("[AuthContext] Effect: Checking auth state...");
-      // Persistence is already set in main.tsx
-        
-      // Check redirect and listen for auth changes
-      console.log("[AuthContext] Effect: Calling checkRedirectResult...");
-      try {
-        await checkRedirectResult(); // Wait for redirect check
-        console.log("[AuthContext] checkRedirectResult completed.");
-      } catch (redirectError) {
-        if (isMounted) {
-          console.error("[AuthContext] Redirect check failed:", redirectError);
-          setError(redirectError instanceof Error ? redirectError : new Error(String(redirectError)));
-        }
-      }
-        
-      if (!isMounted) return;
-
-      console.log("[AuthContext] Effect: Subscribing to onAuthChange...");
-      unsubscribe = onAuthChange((user: User | null) => {
-        if (isMounted) {
-          console.log("[AuthContext] onAuthChange triggered. User received:", user);
-          setCurrentUser(user);
-          setError(null); // Clear error on successful auth change (or null user)
-          // Set loading to false ONLY after the first auth state is received
-          console.log("[AuthContext] First auth state received. Setting loading to false.");
-          setLoading(false);
-        }
-      });
-    };
-
-    checkAuth();
-
-    return () => {
-      console.log("[AuthContext] Unmounting Effect. Cleaning up auth listener.");
-      isMounted = false;
-      unsubscribe();
-    };
-  }, []); // Run only once on mount
-
-  const value: AuthContextType = {
-    currentUser,
-    loading,
-    error,
-    signInWithGoogle: signInWithGoogleRedirect,
-    signOut: signOutUser,
-  };
-
-  return (
-    <AuthContext.Provider value={value}>
-      {children} 
-    </AuthContext.Provider>
-  );
-}
-
-/**
- * Custom hook to use the auth context.
- */
-export function useAuth(): AuthContextType {
+export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (context === null) {
+  if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
-} 
+};
+
+interface AuthProviderProps {
+  children: ReactNode;
+}
+
+export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+      setLoading(false);
+      if (user) {
+        console.log("User logged in:", user.uid);
+        // Optionally fetch additional user profile data here
+      } else {
+        console.log("User logged out");
+      }
+    });
+
+    // Cleanup subscription on unmount
+    return () => unsubscribe();
+  }, []);
+
+  const signOut = async () => {
+    try {
+      setLoading(true);
+      await firebaseSignOut(auth);
+      // User state will be updated by onAuthStateChanged
+    } catch (error) {
+      console.error("Error signing out:", error);
+      // Handle sign-out errors appropriately
+    } finally {
+      // setLoading(false); // Loading state is handled by onAuthStateChanged
+    }
+  };
+
+  const signInWithGoogleToken = async (idToken: string) => {
+    setLoading(true);
+    try {
+      const credential = GoogleAuthProvider.credential(idToken);
+      await signInWithCredential(auth, credential);
+      // User state will be updated by onAuthStateChanged upon successful sign-in
+      console.log("Successfully signed in with Google credential");
+    } catch (error) {
+      console.error("Error signing in with Google credential:", error);
+      // Rethrow the error so the calling component (Login) can handle it
+      throw error; 
+    } finally {
+       // setLoading(false); // Let onAuthStateChanged handle final loading state
+    }
+  };
+
+  const value = {
+    currentUser,
+    loading,
+    signInWithGoogleToken,
+    signOut,
+  };
+
+  // Render children only after initial loading is complete
+  // or provide a global loading indicator if preferred
+  return (
+    <AuthContext.Provider value={value}>
+      {/* {!loading ? children : <LoadingScreen />} Example with global loading */}
+      {children} 
+    </AuthContext.Provider>
+  );
+}; 

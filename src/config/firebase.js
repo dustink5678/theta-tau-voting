@@ -14,8 +14,6 @@ const firebaseConfig = {
   measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID || import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
-console.log("[FirebaseConfig] Using config:", firebaseConfig); // Log the actual config object
-
 // Initialize Firebase with error handling
 let firebaseApp;
 try {
@@ -27,7 +25,6 @@ try {
 
 // Initialize Firebase services with error handling
 const auth = getAuth(firebaseApp);
-
 const db = getFirestore(firebaseApp);
 
 // Initialize Analytics conditionally to handle privacy blockers

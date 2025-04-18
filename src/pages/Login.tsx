@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Button,
@@ -16,45 +16,103 @@ import {
   AlertDescription,
   CloseButton,
 } from '@chakra-ui/react';
-import { FcGoogle } from 'react-icons/fc';
-import { useAuth } from '../contexts/AuthContext.tsx';
+// import { FcGoogle } from 'react-icons/fc'; // No longer needed for the button
+import { useAuth } from '../contexts/AuthContext'; // Import the new context hook
+import { useNavigate } from 'react-router-dom';
 import thetaTauLogo from '../assets/logo.png';
 
+// Declare the google object from the GSI script
+declare global {
+  interface Window {
+    google: any;
+  }
+}
+
 const Login = () => {
-  const { signInWithGoogle, loading: authLoading, error: authError, currentUser } = useAuth();
-  const [isLoading, setIsLoading] = useState(false);
+  const { signInWithGoogleToken } = useAuth(); // Get the sign-in function
+  const [isLoading, setIsLoading] = useState(false); // Still useful for the initial GIS button rendering/click
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const toast = useToast();
+  const navigate = useNavigate();
+  const googleButtonRef = useRef<HTMLDivElement>(null); // Ref for the Google button container
 
-  console.log(`[Login Page] Render. Auth Loading: ${authLoading}, Current User: ${!!currentUser}, Auth Error:`, authError);
-
-  const handleGoogleSignIn = async () => {
+  // Google Sign-In Callback
+  const handleGoogleSignIn = async (response: any) => {
     setIsLoading(true);
     setErrorMessage(null);
-    console.log("[Login Page] handleGoogleSignIn called.");
-    try {
-      await signInWithGoogle();
-      console.log("[Login Page] signInWithGoogle promise resolved (redirect initiated.)");
-    } catch (error: any) {
-      console.error("[Login Page] Google Sign-In Error caught:", error.code, error.message, error);
-      setErrorMessage(error.message || 'Failed to initiate Google Sign-in. Please try again.');
-      toast({
-        title: 'Sign-in Error',
-        description: error.message || 'An unexpected error occurred during sign-in.',
-        status: 'error',
-        duration: 5000,
-        isClosable: true,
-      });
-    } finally {
+    console.log('Google Sign-In response:', response);
+    if (response.credential) {
+      try {
+        await signInWithGoogleToken(response.credential); // Pass the ID token to AuthContext
+        // Navigation should be handled by AuthContext's onAuthStateChanged listener
+        // and the routing logic in App.tsx
+        toast({
+          title: 'Sign-in successful',
+          status: 'success',
+          duration: 3000,
+          isClosable: true,
+        });
+      } catch (error: any) {
+        console.error("Firebase Sign-In Error:", error);
+        // Handle specific Firebase errors if needed
+        let message = error.message || 'An error occurred during Firebase sign-in.';
+        if (error.code === 'auth/user-disabled') {
+          message = 'Your account has been disabled.';
+        } else if (error.code === 'auth/popup-closed-by-user') {
+            message = 'Sign-in cancelled.'; // Example
+        }
+        // Consider specific handling for 'auth/account-exists-with-different-credential' if merging accounts isn't desired
+        setErrorMessage(message);
+      } finally {
+        setIsLoading(false);
+      }
+    } else {
+      console.error("Google Sign-In failed:", response);
+      setErrorMessage('Google Sign-In failed. No credential received.');
       setIsLoading(false);
     }
   };
 
-  if (authLoading && !isLoading) {
+  // Initialize Google Identity Services
+  useEffect(() => {
+    const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+    if (!googleClientId) {
+        console.error("Google Client ID not found. Make sure VITE_GOOGLE_CLIENT_ID is set in your environment variables.");
+        setErrorMessage("Sign-in configuration error. Please contact support.");
+        return;
+    }
+
+    if (window.google?.accounts?.id) {
+      window.google.accounts.id.initialize({
+        client_id: googleClientId,
+        callback: handleGoogleSignIn,
+      });
+
+      if (googleButtonRef.current) {
+        window.google.accounts.id.renderButton(
+          googleButtonRef.current, // Render the button in this div
+          { theme: 'outline', size: 'large', width: '300px' } // Customize button appearance
+        );
+      }
+       window.google.accounts.id.prompt(); // Optional: display the One Tap prompt
+    } else {
+      console.log("Google Identity Services script not loaded yet.");
+      // Optionally add a small delay and retry, or display a message
+    }
+
+    // Cleanup function if needed (though GSI manages its state)
+    return () => {
+      // Potentially hide prompt if component unmounts?
+      // window.google?.accounts?.id?.cancel();
+    };
+  }, []); // Run only once on mount
+
+  // Show loading spinner if authentication is in progress
+  if (isLoading) {
     return (
       <Box 
         width="100%" 
-        minH="calc(100vh - 56px)" 
+        minH="calc(100vh - 56px)" // Assuming 56px is navbar height
         display="flex" 
         alignItems="center" 
         justifyContent="center"
@@ -63,7 +121,7 @@ const Login = () => {
           <VStack spacing={4}>
             <Spinner size="xl" color="blue.500" thickness="4px" />
             <Text>
-              {'Processing, please wait...'}
+              {'Signing in...'}
             </Text>
           </VStack>
         </Center>
@@ -74,7 +132,7 @@ const Login = () => {
   return (
     <Box 
       width="100%" 
-      minH="calc(100vh - 56px)" 
+      minH="calc(100vh)" // Use full viewport height for login page
       bg="gray.50" 
       display="flex" 
       alignItems="center" 
@@ -102,13 +160,13 @@ const Login = () => {
           Sign in with your Google account to participate in chapter voting
         </Text>
         
-        {(errorMessage || authError) && (
+        {errorMessage && (
           <Alert status="error" mb={6} borderRadius="md">
             <AlertIcon />
             <Box flex="1">
               <AlertTitle>Error</AlertTitle>
               <AlertDescription display="block">
-                {errorMessage || authError?.message || 'An unknown error occurred'}
+                {errorMessage}
               </AlertDescription>
             </Box>
             <CloseButton 
@@ -119,27 +177,11 @@ const Login = () => {
             />
           </Alert>
         )}
-        
-        <VStack spacing={4} width="100%">
-          <Button
-            size="lg"
-            colorScheme="blue"
-            onClick={handleGoogleSignIn}
-            width="100%"
-            leftIcon={<FcGoogle size={20} />}
-            isLoading={isLoading}
-            disabled={authLoading}
-          >
-            Sign in with Google
-          </Button>
-        </VStack>
-        
-        <Text mt={6} fontSize="sm" color="gray.500" textAlign="center">
-          This site works best in Chrome, Firefox, Edge, or Safari with cookies and JavaScript enabled.<br />
-          {/*
-            COOP warning: You may see a 'Cross-Origin-Opener-Policy policy would block the window.close call.' warning in the console after sign-in. This is expected with modern browser security and Firebase popups, and does not affect functionality.
-          */}
-        </Text>
+
+        {/* Container for the Google Sign-In Button */}
+        <Box ref={googleButtonRef} mb={4} display="flex" justifyContent="center" />
+
+        {/* Add any other necessary content for the login page */}
       </Flex>
     </Box>
   );
