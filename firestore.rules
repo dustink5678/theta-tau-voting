@@ -1,0 +1,42 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Allow reading the entire users collection if authenticated
+    match /users/{userId} {
+      // Allow reading your own document even if you're a new or unverified user
+      allow read: if request.auth != null && request.auth.uid == userId;
+      // Anyone authenticated can read the users collection
+      allow read: if isAuthenticated();
+      
+      // Users can only write their own data
+      allow write: if isAuthenticated() && request.auth.uid == userId;
+      
+      // Admins can write to any user document
+      // This still requires a read to check admin status, but the read is already allowed above
+      allow write: if isAuthenticated() && 
+                     get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Questions collection
+    match /questions/{questionId} {
+      // Anyone authenticated can read questions
+      allow read: if isAuthenticated();
+      
+      // Allow authenticated users to update only the answers field
+      allow update: if isAuthenticated() &&
+                      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['answers']);
+      
+      // Only admins can create/delete questions or update other fields
+      allow create, delete: if isAuthenticated() && 
+                     get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      allow update: if isAuthenticated() && 
+                     get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+  }
+}
