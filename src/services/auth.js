@@ -5,6 +5,7 @@ import {
   signInWithRedirect,
   signInWithPopup,
   GoogleAuthProvider,
+  OAuthProvider,
   signOut,
   onAuthStateChanged,
   updateEmail,
@@ -34,6 +35,7 @@ export const checkRedirectResult = async () => {
   try {
     const result = await getRedirectResult(auth);
     if (result) {
+      console.log('Redirect result processed successfully');
       return result.user;
     }
     return null;
@@ -56,92 +58,61 @@ export function resetUserCache() {
   sessionStorage.clear();
 }
 
-// Enhanced Google sign-in with better browser compatibility
+// Updated Google sign-in: only use popup, with robust error handling
 export const signInWithGoogle = async () => {
   const provider = new GoogleAuthProvider();
-  
-  // Enhanced custom parameters for better browser compatibility
   provider.setCustomParameters({
     prompt: 'select_account',
     access_type: 'offline',
     include_granted_scopes: 'true',
-    // Additional parameters for restricted browsers
-    hd: '', // Allow any domain
-    response_type: 'code',
   });
-
-  // Detect browser restrictions
-  const isRestrictedBrowser = () => {
-    const userAgent = navigator.userAgent.toLowerCase();
-    return (
-      userAgent.includes('opera') ||
-      userAgent.includes('opr/') ||
-      userAgent.includes('edg/') && userAgent.includes('chromium') === false ||
-      userAgent.includes('safari') && userAgent.includes('chrome') === false
-    );
-  };
-
-  // Check for popup blockers and storage restrictions
-  const checkBrowserCapabilities = () => {
-    const hasLocalStorage = typeof Storage !== 'undefined' && window.localStorage;
-    const hasSessionStorage = typeof Storage !== 'undefined' && window.sessionStorage;
-    const hasCookies = navigator.cookieEnabled;
-    
-    return {
-      hasLocalStorage,
-      hasSessionStorage,
-      hasCookies,
-      isRestricted: isRestrictedBrowser()
-    };
-  };
-
-  const capabilities = checkBrowserCapabilities();
-  
-  // For restricted browsers, use redirect method
-  if (capabilities.isRestricted || !capabilities.hasLocalStorage || !capabilities.hasCookies) {
-    try {
-      return await signInWithRedirect(auth, provider);
-    } catch (error) {
-      console.error('Redirect authentication failed:', error);
-      throw error;
-    }
-  }
-
-  // For modern browsers, try popup first, then fallback to redirect
   try {
-    // Clear any previous authentication state
-    localStorage.removeItem('useRedirectMode');
-    
-    // Attempt popup authentication
+    // Always use popup for Google sign-in
     const result = await signInWithPopup(auth, provider, browserPopupRedirectResolver);
+    // On success, clear any previous error state
+    localStorage.setItem('useRedirectMode', 'false');
     return result;
   } catch (error) {
-    // Handle specific error codes for restricted browsers
+    // If we get a known cache/cookie/COOP error, reset cache and sign out
     if (
-      error.code === 'auth/popup-blocked' ||
-      error.code === 'auth/popup-closed-by-user' ||
       error.code === 'auth/network-request-failed' ||
       error.code === 'auth/web-storage-unsupported' ||
       error.code === 'auth/storage-unavailable' ||
       error.code === 'auth/cookie-not-set' ||
-      error.code === 'auth/operation-not-allowed' ||
-      error.code === 'auth/unauthorized-domain' ||
-      error.code === 'auth/domain-not-whitelisted'
+      error.code === 'auth/operation-not-allowed'
     ) {
-      // Clear cache and try redirect method
       resetUserCache();
       await signOut(auth);
-      
-      try {
-        return await signInWithRedirect(auth, provider);
-      } catch (redirectError) {
-        console.error('Both popup and redirect authentication failed:', redirectError);
-        throw redirectError;
-      }
     }
-    
-    // For other errors, throw them as-is
+    // Remove any redirect mode flag
+    localStorage.removeItem('useRedirectMode');
     throw error;
+  }
+};
+
+// Modified Apple sign-in with the same approach
+export const signInWithApple = async () => {
+  const provider = new OAuthProvider('apple.com');
+  provider.addScope('email');
+  provider.addScope('name');
+  
+  const redirectMode = localStorage.getItem('useRedirectMode') === 'true';
+  
+  if (redirectMode) {
+    console.log('Using redirect authentication (previous success)');
+    return signInWithRedirect(auth, provider);
+  }
+  
+  try {
+    console.log('Attempting popup authentication');
+    const result = await signInWithPopup(auth, provider, browserPopupRedirectResolver);
+    localStorage.setItem('useRedirectMode', 'false');
+    return result;
+  } catch (error) {
+    console.warn("Popup auth failed, falling back to redirect:", error);
+    localStorage.setItem('useRedirectMode', 'true');
+    auth.tenantId = null;
+    return signInWithRedirect(auth, provider);
   }
 };
 
@@ -180,6 +151,7 @@ export const subscribeToAuthChanges = (callback) => {
 
 // Legacy aliases for backwards compatibility
 export const loginWithGoogle = signInWithGoogle;
+export const loginWithApple = signInWithApple;
 export const logout = logOut;
 
 // Export auth instance for direct access if needed

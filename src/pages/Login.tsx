@@ -22,7 +22,7 @@ import { useNavigate } from 'react-router-dom';
 import thetaTauLogo from '../assets/logo.png';
 
 const Login = () => {
-  const { signInWithGoogle, user } = useAuth() as any;
+  const { signInWithGoogle, resetUserCache, signOut, user } = useAuth() as any;
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const toast = useToast();
@@ -62,50 +62,40 @@ const Login = () => {
     }
   };
 
-  // Enhanced error handling for browser restrictions
+  // Handle Reset Session button click
+  const handleResetSession = async () => {
+    setIsLoading(true);
+    setErrorMessage(null);
+    try {
+      resetUserCache();
+      await signOut();
+      toast({
+        title: 'Session Reset',
+        description: 'Your session and cache have been cleared. Please try signing in again.',
+        status: 'success',
+        duration: 5000,
+        isClosable: true,
+      });
+    } catch (error: any) {
+      setErrorMessage('Failed to reset session. Please reload the page.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Helper for error handling
   const handleAuthError = (error: any, provider: string) => {
     console.error(`Error starting ${provider} sign-in:`, error);
     let errorMsg = `${provider} authentication failed. Please try again.`;
-    
-    // Enhanced error handling for different browser scenarios
-    switch (error.code) {
-      case 'auth/network-request-failed':
-        errorMsg = 'Network error. This may be caused by content blockers, privacy settings, or network restrictions. Try disabling ad blockers, using incognito mode, or checking your network connection.';
-        break;
-      case 'auth/web-storage-unsupported':
-      case 'auth/storage-unavailable':
-        errorMsg = 'Your browser has disabled cookies or storage. Please enable them for this site or try a different browser.';
-        break;
-      case 'auth/popup-blocked':
-      case 'auth/popup-closed-by-user':
-        errorMsg = 'Authentication popup was blocked or closed. Please allow popups for this site or try using a different browser.';
-        break;
-      case 'auth/unauthorized-domain':
-      case 'auth/domain-not-whitelisted':
-        errorMsg = 'This domain is not authorized for authentication. Please contact the administrator.';
-        break;
-      case 'auth/operation-not-allowed':
-        errorMsg = 'Google sign-in is not enabled for this application. Please contact the administrator.';
-        break;
-      case 'auth/cookie-not-set':
-        errorMsg = 'Browser cookies are required for authentication. Please enable cookies and try again.';
-        break;
-      case 'auth/too-many-requests':
-        errorMsg = 'Too many authentication attempts. Please wait a moment and try again.';
-        break;
-      case 'auth/user-disabled':
-        errorMsg = 'This account has been disabled. Please contact the administrator.';
-        break;
-      case 'auth/invalid-credential':
-        errorMsg = 'Invalid credentials. Please try signing in again.';
-        break;
-      default:
-        if (error.message) {
-          errorMsg = error.message;
-        }
-        break;
+    if (error.code === 'auth/network-request-failed') {
+      errorMsg = 'Network error. This may be caused by content blockers or privacy settings. Try disabling ad blockers or using incognito mode.';
+    } else if (error.code === 'auth/web-storage-unsupported' || error.code === 'auth/storage-unavailable') {
+      errorMsg = 'Your browser has disabled cookies or storage. Please enable them for this site or try a different browser.';
+    } else if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user') {
+      errorMsg = 'Authentication popup was blocked or closed. Please allow popups for this site.';
+    } else if (error.message) {
+      errorMsg = error.message;
     }
-    
     setErrorMessage(errorMsg);
     toast({
       title: `${provider} Authentication Error`,
@@ -187,16 +177,35 @@ const Login = () => {
           </Alert>
         )}
         
-        <Button
-          size="lg"
-          colorScheme="blue"
-          onClick={handleGoogleSignIn}
-          width="100%"
-          leftIcon={<FcGoogle size={20} />}
-          isLoading={isLoading}
-        >
-          Sign in with Google
-        </Button>
+        <VStack spacing={4} width="100%">
+          <Button
+            size="lg"
+            colorScheme="blue"
+            onClick={handleGoogleSignIn}
+            width="100%"
+            leftIcon={<FcGoogle size={20} />}
+            isLoading={isLoading}
+          >
+            Sign in with Google
+          </Button>
+          <Button
+            size="md"
+            variant="outline"
+            colorScheme="gray"
+            onClick={handleResetSession}
+            width="100%"
+            isLoading={isLoading}
+          >
+            Reset Session / Clear Cache
+          </Button>
+        </VStack>
+        
+        <Text mt={6} fontSize="sm" color="gray.500" textAlign="center">
+          This site works best in Chrome, Firefox, Edge, or Safari with cookies and JavaScript enabled.<br />
+          {/*
+            COOP warning: You may see a 'Cross-Origin-Opener-Policy policy would block the window.close call.' warning in the console after sign-in. This is expected with modern browser security and Firebase popups, and does not affect functionality.
+          */}
+        </Text>
       </Flex>
     </Box>
   );

@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import * as authService from '../services/auth';
 import { db } from '../config/firebase';
 import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
-import { signInWithGoogle, resetUserCache } from '../services/auth';
+import { signInWithGoogle, signInWithApple, resetUserCache } from '../services/auth';
 
 // Create the context
 const AuthContext = createContext(null);
@@ -27,10 +27,12 @@ export function AuthProvider({ children }) {
     if (!user) return null;
     
     try {
+      console.log("Getting user data for:", user.uid);
       const userRef = doc(db, 'users', user.uid);
       const userDoc = await getDoc(userRef);
       
       if (userDoc.exists()) {
+        console.log("User document exists:", userDoc.data());
         // Return a combination of Firebase auth user and Firestore data
         return {
           ...user,
@@ -40,6 +42,7 @@ export function AuthProvider({ children }) {
           displayName: user.displayName || userDoc.data().name || 'User'
         };
       } else {
+        console.log("Creating new user document");
         // Create a new user document
         const newUser = {
           uid: user.uid,
@@ -145,6 +148,22 @@ export function AuthProvider({ children }) {
     }
   };
 
+  // Sign in with Apple
+  const loginWithApple = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await authService.signInWithApple();
+      // With popup flow, we get the user result directly
+      return result.user;
+    } catch (err) {
+      setLoading(false);
+      return handleError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Sign out
   const signOut = async () => {
     setError(null);
@@ -200,6 +219,7 @@ export function AuthProvider({ children }) {
     registerWithEmail,
     loginWithEmail,
     loginWithGoogle,
+    loginWithApple,
     signOut,
     updateUserEmail,
     updateUserPassword,
