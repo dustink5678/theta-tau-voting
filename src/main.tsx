@@ -7,7 +7,6 @@ import './index.css'
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then(registrations => {
     for (let registration of registrations) {
-      console.log('Unregistering service worker to prevent authentication issues');
       registration.unregister();
     }
   });

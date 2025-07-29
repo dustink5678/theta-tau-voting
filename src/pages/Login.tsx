@@ -21,8 +21,10 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import thetaTauLogo from '../assets/logo.png';
 
+
+
 const Login = () => {
-  const { signInWithGoogle, resetUserCache, signOut, user } = useAuth() as any;
+  const { signInWithGoogle, user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const toast = useToast();
@@ -31,10 +33,8 @@ const Login = () => {
   // Effect for checking existing user and redirect
   useEffect(() => {
     if (user) {
-      // @ts-ignore
       if (user.role === 'admin') {
         navigate('/admin');
-      // @ts-ignore
       } else if (user.verified) {
         navigate('/dashboard');
       } else {
@@ -62,30 +62,8 @@ const Login = () => {
     }
   };
 
-  // Handle Reset Session button click
-  const handleResetSession = async () => {
-    setIsLoading(true);
-    setErrorMessage(null);
-    try {
-      resetUserCache();
-      await signOut();
-      toast({
-        title: 'Session Reset',
-        description: 'Your session and cache have been cleared. Please try signing in again.',
-        status: 'success',
-        duration: 5000,
-        isClosable: true,
-      });
-    } catch (error: any) {
-      setErrorMessage('Failed to reset session. Please reload the page.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   // Helper for error handling
   const handleAuthError = (error: any, provider: string) => {
-    console.error(`Error starting ${provider} sign-in:`, error);
     let errorMsg = `${provider} authentication failed. Please try again.`;
     if (error.code === 'auth/network-request-failed') {
       errorMsg = 'Network error. This may be caused by content blockers or privacy settings. Try disabling ad blockers or using incognito mode.';
@@ -119,9 +97,7 @@ const Login = () => {
         <Center>
           <VStack spacing={4}>
             <Spinner size="xl" color="blue.500" thickness="4px" />
-            <Text>
-              {'Processing, please wait...'}
-            </Text>
+            <Text>Processing, please wait...</Text>
           </VStack>
         </Center>
       </Box>
@@ -177,35 +153,16 @@ const Login = () => {
           </Alert>
         )}
         
-        <VStack spacing={4} width="100%">
-          <Button
-            size="lg"
-            colorScheme="blue"
-            onClick={handleGoogleSignIn}
-            width="100%"
-            leftIcon={<FcGoogle size={20} />}
-            isLoading={isLoading}
-          >
-            Sign in with Google
-          </Button>
-          <Button
-            size="md"
-            variant="outline"
-            colorScheme="gray"
-            onClick={handleResetSession}
-            width="100%"
-            isLoading={isLoading}
-          >
-            Reset Session / Clear Cache
-          </Button>
-        </VStack>
-        
-        <Text mt={6} fontSize="sm" color="gray.500" textAlign="center">
-          This site works best in Chrome, Firefox, Edge, or Safari with cookies and JavaScript enabled.<br />
-          {/*
-            COOP warning: You may see a 'Cross-Origin-Opener-Policy policy would block the window.close call.' warning in the console after sign-in. This is expected with modern browser security and Firebase popups, and does not affect functionality.
-          */}
-        </Text>
+        <Button
+          size="lg"
+          colorScheme="blue"
+          onClick={handleGoogleSignIn}
+          width="100%"
+          leftIcon={<FcGoogle size={20} />}
+          isLoading={isLoading}
+        >
+          Sign in with Google
+        </Button>
       </Flex>
     </Box>
   );

@@ -2,10 +2,8 @@ import {
   getAuth, 
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
-  signInWithRedirect,
   signInWithPopup,
   GoogleAuthProvider,
-  OAuthProvider,
   signOut,
   onAuthStateChanged,
   updateEmail,
@@ -13,37 +11,17 @@ import {
   sendPasswordResetEmail,
   browserPopupRedirectResolver,
   browserLocalPersistence,
-  setPersistence,
-  getRedirectResult
+  setPersistence
 } from 'firebase/auth';
 import { firebaseApp } from '../config/firebase';
 
 // Initialize Firebase auth service
 const auth = getAuth(firebaseApp);
 
-// Set base URL for redirects
-const origin = window.location.origin;
-const redirectUrl = `${origin}/auth`;
-
 // Configure auth persistence to avoid cookie issues
 setPersistence(auth, browserLocalPersistence).catch(err => {
   console.error("Error setting persistence:", err);
 });
-
-// Check for redirect result on page load
-export const checkRedirectResult = async () => {
-  try {
-    const result = await getRedirectResult(auth);
-    if (result) {
-      console.log('Redirect result processed successfully');
-      return result.user;
-    }
-    return null;
-  } catch (error) {
-    console.error('Error processing redirect result:', error);
-    throw error;
-  }
-};
 
 // Utility to clear cookies and local/session storage for cache reset
 export function resetUserCache() {
@@ -69,8 +47,6 @@ export const signInWithGoogle = async () => {
   try {
     // Always use popup for Google sign-in
     const result = await signInWithPopup(auth, provider, browserPopupRedirectResolver);
-    // On success, clear any previous error state
-    localStorage.setItem('useRedirectMode', 'false');
     return result;
   } catch (error) {
     // If we get a known cache/cookie/COOP error, reset cache and sign out
@@ -84,37 +60,11 @@ export const signInWithGoogle = async () => {
       resetUserCache();
       await signOut(auth);
     }
-    // Remove any redirect mode flag
-    localStorage.removeItem('useRedirectMode');
     throw error;
   }
 };
 
-// Modified Apple sign-in with the same approach
-export const signInWithApple = async () => {
-  const provider = new OAuthProvider('apple.com');
-  provider.addScope('email');
-  provider.addScope('name');
-  
-  const redirectMode = localStorage.getItem('useRedirectMode') === 'true';
-  
-  if (redirectMode) {
-    console.log('Using redirect authentication (previous success)');
-    return signInWithRedirect(auth, provider);
-  }
-  
-  try {
-    console.log('Attempting popup authentication');
-    const result = await signInWithPopup(auth, provider, browserPopupRedirectResolver);
-    localStorage.setItem('useRedirectMode', 'false');
-    return result;
-  } catch (error) {
-    console.warn("Popup auth failed, falling back to redirect:", error);
-    localStorage.setItem('useRedirectMode', 'true');
-    auth.tenantId = null;
-    return signInWithRedirect(auth, provider);
-  }
-};
+
 
 // Email authentication methods
 export const registerWithEmail = async (email, password) => {
@@ -140,7 +90,6 @@ export const updateUserPassword = async (user, newPassword) => {
 
 // Session management
 export const logOut = async () => {
-  localStorage.removeItem('useRedirectMode');
   return signOut(auth);
 };
 
@@ -151,7 +100,6 @@ export const subscribeToAuthChanges = (callback) => {
 
 // Legacy aliases for backwards compatibility
 export const loginWithGoogle = signInWithGoogle;
-export const loginWithApple = signInWithApple;
 export const logout = logOut;
 
 // Export auth instance for direct access if needed

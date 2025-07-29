@@ -18,7 +18,6 @@ const firebaseConfig = {
 let firebaseApp;
 try {
   firebaseApp = initializeApp(firebaseConfig);
-  console.log('Firebase initialized successfully');
 } catch (error) {
   console.error('Error initializing Firebase:', error);
 }
@@ -32,9 +31,6 @@ let analytics = null;
 isSupported().then(yes => {
   if (yes) {
     analytics = getAnalytics(firebaseApp);
-    console.log('Analytics initialized successfully');
-  } else {
-    console.log('Analytics not supported in this environment');
   }
 }).catch(error => {
   console.error('Error initializing analytics:', error);

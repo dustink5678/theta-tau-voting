@@ -1,52 +1,85 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import * as authService from '../services/auth';
 import { db } from '../config/firebase';
 import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
-import { signInWithGoogle, signInWithApple, resetUserCache } from '../services/auth';
+import { signInWithGoogle, resetUserCache } from '../services/auth';
+import { User as FirebaseUser } from 'firebase/auth';
+
+interface User {
+  uid: string;
+  email: string;
+  displayName?: string;
+  role: 'admin' | 'user';
+  verified: boolean;
+  answered: boolean;
+  createdAt?: string;
+  name?: string;
+}
+
+interface AuthContextType {
+  currentUser: User | null;
+  user: User | null;
+  loading: boolean;
+  error: string | null;
+  registerWithEmail: (email: string, password: string) => Promise<FirebaseUser>;
+  loginWithEmail: (email: string, password: string) => Promise<FirebaseUser>;
+  loginWithGoogle: () => Promise<any>;
+  signOut: () => Promise<void>;
+  updateUserEmail: (newEmail: string) => Promise<void>;
+  updateUserPassword: (newPassword: string) => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
+  resetUserCache: () => void;
+  signInWithGoogle: () => Promise<any>;
+}
+
+interface AuthProviderProps {
+  children: ReactNode;
+}
 
 // Create the context
-const AuthContext = createContext(null);
+const AuthContext = createContext<AuthContextType | null>(null);
 
 /**
  * AuthProvider component that provides authentication state and methods to all children
  */
-export function AuthProvider({ children }) {
-  const [currentUser, setCurrentUser] = useState(null);
+export function AuthProvider({ children }: AuthProviderProps) {
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
 
   // Handle errors consistently
-  const handleError = (err) => {
+  const handleError = (err: any): never => {
     console.error('Auth error:', err);
-    setError(err);
+    setError(err.message || err.toString());
     throw err;
   };
 
   // Get user data from Firestore
-  const getUserData = async (user) => {
+  const getUserData = async (user: FirebaseUser): Promise<User | null> => {
     if (!user) return null;
     
     try {
-      console.log("Getting user data for:", user.uid);
       const userRef = doc(db, 'users', user.uid);
       const userDoc = await getDoc(userRef);
       
       if (userDoc.exists()) {
-        console.log("User document exists:", userDoc.data());
         // Return a combination of Firebase auth user and Firestore data
+        const userData = userDoc.data();
         return {
-          ...user,
-          ...userDoc.data(),
           uid: user.uid,
-          email: user.email,
-          displayName: user.displayName || userDoc.data().name || 'User'
+          email: user.email || '',
+          displayName: user.displayName || userData.name || 'User',
+          role: userData.role || 'user',
+          verified: userData.verified || false,
+          answered: userData.answered || false,
+          createdAt: userData.createdAt,
+          name: userData.name
         };
       } else {
-        console.log("Creating new user document");
         // Create a new user document
-        const newUser = {
+        const newUser: User = {
           uid: user.uid,
-          email: user.email,
+          email: user.email || '',
           displayName: user.displayName || 'User',
           verified: false,
           answered: false,
@@ -57,12 +90,11 @@ export function AuthProvider({ children }) {
         await setDoc(userRef, newUser);
         return newUser;
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error getting user data:", err);
       return {
-        ...user,
         uid: user.uid,
-        email: user.email,
+        email: user.email || '',
         displayName: user.displayName || 'User',
         role: 'user',
         verified: false,
@@ -73,19 +105,23 @@ export function AuthProvider({ children }) {
 
   // Replace the useEffect for auth state changes with a real-time Firestore listener
   useEffect(() => {
-    let unsubscribeUserDoc = null;
-    const unsubscribeAuth = authService.subscribeToAuthChanges(async (firebaseUser) => {
+    let unsubscribeUserDoc: (() => void) | null = null;
+    const unsubscribeAuth = authService.subscribeToAuthChanges(async (firebaseUser: FirebaseUser | null) => {
       if (firebaseUser) {
         // Listen to changes on the user's Firestore document
         const userRef = doc(db, 'users', firebaseUser.uid);
         unsubscribeUserDoc = onSnapshot(userRef, (userDoc) => {
           if (userDoc.exists()) {
+            const userData = userDoc.data();
             setCurrentUser({
-              ...firebaseUser,
-              ...userDoc.data(),
               uid: firebaseUser.uid,
-              email: firebaseUser.email,
-              displayName: firebaseUser.displayName || userDoc.data().name || 'User'
+              email: firebaseUser.email || '',
+              displayName: firebaseUser.displayName || userData.name || 'User',
+              role: userData.role || 'user',
+              verified: userData.verified || false,
+              answered: userData.answered || false,
+              createdAt: userData.createdAt,
+              name: userData.name
             });
           } else {
             setCurrentUser(null);
@@ -105,13 +141,13 @@ export function AuthProvider({ children }) {
   }, []);
 
   // Register with email and password
-  const registerWithEmail = async (email, password) => {
+  const registerWithEmail = async (email: string, password: string): Promise<FirebaseUser> => {
     setLoading(true);
     setError(null);
     try {
       const userCredential = await authService.registerWithEmail(email, password);
       return userCredential.user;
-    } catch (err) {
+    } catch (err: any) {
       return handleError(err);
     } finally {
       setLoading(false);
@@ -119,13 +155,13 @@ export function AuthProvider({ children }) {
   };
 
   // Sign in with email and password
-  const loginWithEmail = async (email, password) => {
+  const loginWithEmail = async (email: string, password: string): Promise<FirebaseUser> => {
     setLoading(true);
     setError(null);
     try {
       const userCredential = await authService.loginWithEmail(email, password);
       return userCredential.user;
-    } catch (err) {
+    } catch (err: any) {
       return handleError(err);
     } finally {
       setLoading(false);
@@ -141,77 +177,60 @@ export function AuthProvider({ children }) {
       await getUserData(result.user);
       setLoading(false);
       return result;
-    } catch (err) {
+    } catch (err: any) {
       setError(err.message);
       setLoading(false);
       throw err;
     }
   };
 
-  // Sign in with Apple
-  const loginWithApple = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await authService.signInWithApple();
-      // With popup flow, we get the user result directly
-      return result.user;
-    } catch (err) {
-      setLoading(false);
-      return handleError(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // Sign out
-  const signOut = async () => {
+  const signOut = async (): Promise<void> => {
     setError(null);
     try {
       await authService.logOut();
-    } catch (err) {
-      return handleError(err);
+    } catch (err: any) {
+      handleError(err);
     }
   };
 
   // Update user email
-  const updateUserEmail = async (newEmail) => {
+  const updateUserEmail = async (newEmail: string): Promise<void> => {
     setError(null);
     try {
       if (!currentUser) {
         throw new Error('No user is currently logged in');
       }
-      await authService.updateUserEmail(currentUser, newEmail);
-    } catch (err) {
-      return handleError(err);
+      await authService.updateUserEmail(currentUser as any, newEmail);
+    } catch (err: any) {
+      handleError(err);
     }
   };
 
   // Update user password
-  const updateUserPassword = async (newPassword) => {
+  const updateUserPassword = async (newPassword: string): Promise<void> => {
     setError(null);
     try {
       if (!currentUser) {
         throw new Error('No user is currently logged in');
       }
-      await authService.updateUserPassword(currentUser, newPassword);
-    } catch (err) {
-      return handleError(err);
+      await authService.updateUserPassword(currentUser as any, newPassword);
+    } catch (err: any) {
+      handleError(err);
     }
   };
 
   // Reset password
-  const resetPassword = async (email) => {
+  const resetPassword = async (email: string): Promise<void> => {
     setError(null);
     try {
       await authService.resetPassword(email);
-    } catch (err) {
-      return handleError(err);
+    } catch (err: any) {
+      handleError(err);
     }
   };
 
-  // Expose resetUserCache for UI use
-  const value = {
+  const value: AuthContextType = {
     currentUser,
     user: currentUser,
     loading,
@@ -219,7 +238,6 @@ export function AuthProvider({ children }) {
     registerWithEmail,
     loginWithEmail,
     loginWithGoogle,
-    loginWithApple,
     signOut,
     updateUserEmail,
     updateUserPassword,
@@ -239,7 +257,7 @@ export function AuthProvider({ children }) {
 /**
  * Custom hook to use the auth context
  */
-export function useAuth() {
+export function useAuth(): AuthContextType {
   const context = useContext(AuthContext);
   if (context === null) {
     throw new Error('useAuth must be used within an AuthProvider');
