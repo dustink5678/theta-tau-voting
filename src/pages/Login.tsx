@@ -199,13 +199,6 @@ const Login = () => {
             Reset Session / Clear Cache
           </Button>
         </VStack>
-        
-        <Text mt={6} fontSize="sm" color="gray.500" textAlign="center">
-          This site works best in Chrome, Firefox, Edge, or Safari with cookies and JavaScript enabled.<br />
-          {/*
-            COOP warning: You may see a 'Cross-Origin-Opener-Policy policy would block the window.close call.' warning in the console after sign-in. This is expected with modern browser security and Firebase popups, and does not affect functionality.
-          */}
-        </Text>
       </Flex>
     </Box>
   );
