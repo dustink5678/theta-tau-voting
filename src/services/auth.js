@@ -248,13 +248,13 @@ const tryOneTap = () => {
           const reason = notification.getSkippedReason();
           console.log('One Tap skipped:', reason);
           
-          // For "unknown_reason", try again after a short delay
+          // For "unknown_reason", try again after a longer delay
           if (reason === 'unknown_reason') {
-            console.log('One Tap skipped with unknown_reason, will retry after delay');
+            console.log('One Tap skipped with unknown_reason, will retry after longer delay');
             setTimeout(() => {
               oneTapPrompted = false;
               resolve(false);
-            }, 1000);
+            }, 2000);
           } else {
             // Reset flag for retry
             oneTapPrompted = false;

@@ -211,7 +211,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const unsubscribeAuth = authService.subscribeToAuthChanges(async (firebaseUser: FirebaseUser | null) => {
       if (firebaseUser) {
         try {
-          // Listen to changes on the user's Firestore document
+          // First, ensure user document exists
+          await getUserData(firebaseUser);
+          
+          // Then listen to changes on the user's Firestore document
           const userRef = doc(db, 'users', firebaseUser.uid);
           unsubscribeUserDoc = onSnapshot(userRef, (userDoc) => {
             if (userDoc.exists()) {

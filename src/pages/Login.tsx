@@ -48,8 +48,8 @@ const Login = () => {
 
       setAuthInitialized(true);
       
-      // Wait for page to fully load
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Wait longer for page to fully load and Google services to initialize
+      await new Promise(resolve => setTimeout(resolve, 3000));
       
       if (user) return; // Check again after delay
       
@@ -99,14 +99,14 @@ const Login = () => {
           // Small delay to ensure DOM is ready, then render Google button
           setTimeout(async () => {
             await renderModernGoogleButton();
-          }, 200);
+          }, 500);
         }
       } catch (error: any) {
         console.log('Progressive auth failed:', error);
         setShowManualButton(true);
         setTimeout(async () => {
           await renderModernGoogleButton();
-        }, 200);
+        }, 500);
       }
     };
 
