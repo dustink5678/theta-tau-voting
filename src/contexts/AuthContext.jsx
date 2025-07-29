@@ -23,7 +23,7 @@ export function AuthProvider({ children }) {
   };
 
   // Get user data from Firestore
-  const getUserData = async (user) => {
+  const getUserData = async (user, additionalData = {}) => {
     if (!user) return null;
     
     try {
@@ -43,11 +43,17 @@ export function AuthProvider({ children }) {
         };
       } else {
         console.log("Creating new user document");
-        // Create a new user document
+        // Create a new user document with additional data if provided
+        const displayName = additionalData.firstName && additionalData.lastName 
+          ? `${additionalData.firstName} ${additionalData.lastName}`
+          : user.displayName || 'User';
+          
         const newUser = {
           uid: user.uid,
           email: user.email,
-          displayName: user.displayName || 'User',
+          displayName: displayName,
+          firstName: additionalData.firstName || null,
+          lastName: additionalData.lastName || null,
           verified: false,
           answered: false,
           role: 'user',
@@ -78,7 +84,7 @@ export function AuthProvider({ children }) {
       if (firebaseUser) {
         // Listen to changes on the user's Firestore document
         const userRef = doc(db, 'users', firebaseUser.uid);
-        unsubscribeUserDoc = onSnapshot(userRef, (userDoc) => {
+        unsubscribeUserDoc = onSnapshot(userDoc => {
           if (userDoc.exists()) {
             setCurrentUser({
               ...firebaseUser,
@@ -105,11 +111,13 @@ export function AuthProvider({ children }) {
   }, []);
 
   // Register with email and password
-  const registerWithEmail = async (email, password) => {
+  const registerWithEmail = async (email, password, userData = {}) => {
     setLoading(true);
     setError(null);
     try {
       const userCredential = await authService.registerWithEmail(email, password);
+      // Create user document with additional data
+      await getUserData(userCredential.user, userData);
       return userCredential.user;
     } catch (err) {
       return handleError(err);

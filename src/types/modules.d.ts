@@ -18,13 +18,20 @@ declare module './AuthContext' {
     uid: string;
     email: string | null;
     displayName?: string | null;
+    firstName?: string | null;
+    lastName?: string | null;
+  }
+  
+  interface UserData {
+    firstName?: string;
+    lastName?: string;
   }
   
   interface AuthContextType {
     currentUser: AuthUser | null;
     loading: boolean;
     error: Error | null;
-    registerWithEmail: (email: string, password: string) => Promise<any>;
+    registerWithEmail: (email: string, password: string, userData?: UserData) => Promise<any>;
     loginWithEmail: (email: string, password: string) => Promise<any>;
     loginWithGoogle: () => Promise<any>;
     loginWithApple: () => Promise<any>;
@@ -40,7 +47,7 @@ declare module './AuthContext' {
     user: any;
     loading: boolean;
     error: Error | null;
-    registerWithEmail: (email: string, password: string) => Promise<any>;
+    registerWithEmail: (email: string, password: string, userData?: UserData) => Promise<any>;
     loginWithEmail: (email: string, password: string) => Promise<any>;
     loginWithGoogle: () => Promise<any>;
     signInWithGoogle: () => Promise<any>;
