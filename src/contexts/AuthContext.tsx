@@ -2,7 +2,13 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import * as authService from '../services/auth';
 import { db } from '../config/firebase';
 import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
-import { signInWithGoogle, resetUserCache } from '../services/auth';
+import { 
+  signInWithGoogle, 
+  signInWithGoogleProgressive, 
+  cancelOneTap,
+  disableAutoSelect,
+  initializeGoogleIdentityServices
+} from '../services/auth';
 import { User as FirebaseUser } from 'firebase/auth';
 
 interface User {
@@ -24,12 +30,15 @@ interface AuthContextType {
   registerWithEmail: (email: string, password: string) => Promise<FirebaseUser>;
   loginWithEmail: (email: string, password: string) => Promise<FirebaseUser>;
   loginWithGoogle: () => Promise<any>;
+  signInWithGoogle: () => Promise<any>;
+  signInWithGoogleProgressive: () => Promise<any>;
   signOut: () => Promise<void>;
   updateUserEmail: (newEmail: string) => Promise<void>;
   updateUserPassword: (newPassword: string) => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   resetUserCache: () => void;
-  signInWithGoogle: () => Promise<any>;
+  initializeOneTap: () => Promise<boolean>;
+  cancelOneTap: () => void;
 }
 
 interface AuthProviderProps {
@@ -41,11 +50,15 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 /**
  * AuthProvider component that provides authentication state and methods to all children
+ * Now includes modern Google Identity Services with One Tap and FedCM support
  */
 export function AuthProvider({ children }: AuthProviderProps) {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [oneTapInitialized, setOneTapInitialized] = useState(false);
+  const [initializationAttempted, setInitializationAttempted] = useState(false);
+  const [initializationInProgress, setInitializationInProgress] = useState(false);
 
   // Handle errors consistently
   const handleError = (err: any): never => {
@@ -54,18 +67,64 @@ export function AuthProvider({ children }: AuthProviderProps) {
     throw err;
   };
 
-  // Get user data from Firestore
+  // Handle Google Identity Services credential response
+  const handleGoogleCredentialResponse = async (response: any) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      console.log('Received Google credential response:', response);
+      
+      // The response contains the Google ID token
+      const { credential } = response;
+      
+      if (!credential) {
+        throw new Error('No credential received from Google');
+      }
+
+      // Parse the JWT token to get user info
+      const base64Payload = credential.split('.')[1];
+      const decodedPayload = JSON.parse(atob(base64Payload));
+      
+      console.log('Decoded Google payload:', decodedPayload);
+      
+      // Create a mock Firebase user object for compatibility
+      const mockFirebaseUser = {
+        uid: decodedPayload.sub,
+        email: decodedPayload.email,
+        displayName: decodedPayload.name,
+        photoURL: decodedPayload.picture,
+        emailVerified: decodedPayload.email_verified
+      };
+
+      // Get or create user data in Firestore
+      await getUserData(mockFirebaseUser as any);
+      
+      console.log('Google One Tap/FedCM sign-in successful');
+      setLoading(false);
+      
+    } catch (error: any) {
+      console.error('Error handling Google credential response:', error);
+      setError(error.message);
+      setLoading(false);
+      throw error;
+    }
+  };
+
+  // Get user data from Firestore with better error handling
   const getUserData = async (user: FirebaseUser): Promise<User | null> => {
     if (!user) return null;
     
     try {
       const userRef = doc(db, 'users', user.uid);
+      
+      // Try to get existing user document
       const userDoc = await getDoc(userRef);
       
       if (userDoc.exists()) {
         // Return a combination of Firebase auth user and Firestore data
         const userData = userDoc.data();
-        return {
+        const combinedUser = {
           uid: user.uid,
           email: user.email || '',
           displayName: user.displayName || userData.name || 'User',
@@ -75,6 +134,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
           createdAt: userData.createdAt,
           name: userData.name
         };
+        
+        setCurrentUser(combinedUser);
+        return combinedUser;
       } else {
         // Create a new user document
         const newUser: User = {
@@ -87,47 +149,115 @@ export function AuthProvider({ children }: AuthProviderProps) {
           createdAt: new Date().toISOString()
         };
         
-        await setDoc(userRef, newUser);
+        try {
+          await setDoc(userRef, newUser);
+          console.log('Created new user document for:', user.uid);
+        } catch (writeError: any) {
+          console.error('Error creating user document:', writeError);
+          // Continue with fallback user even if write fails
+        }
+        
+        setCurrentUser(newUser);
         return newUser;
       }
     } catch (err: any) {
       console.error("Error getting user data:", err);
-      return {
+      
+      // Create fallback user if Firestore access fails
+      const fallbackUser = {
         uid: user.uid,
         email: user.email || '',
         displayName: user.displayName || 'User',
-        role: 'user',
+        role: 'user' as const,
         verified: false,
         answered: false
       };
+      
+      setCurrentUser(fallbackUser);
+      return fallbackUser;
+    }
+  };
+
+  // Initialize One Tap authentication
+  const initializeOneTap = async (): Promise<boolean> => {
+    if (oneTapInitialized || currentUser || initializationAttempted || initializationInProgress) {
+      return false; // Already initialized, user is signed in, already attempted, or in progress
+    }
+
+    try {
+      setInitializationInProgress(true);
+      setInitializationAttempted(true);
+      setOneTapInitialized(true);
+      
+      // Initialize Google Identity Services
+      await initializeGoogleIdentityServices();
+      
+      // Try progressive authentication
+      const result = await signInWithGoogleProgressive(handleGoogleCredentialResponse);
+      
+      return result !== false; // Returns false if manual button click is needed
+    } catch (error: any) {
+      console.log('One Tap initialization failed:', error);
+      return false;
+    } finally {
+      setInitializationInProgress(false);
     }
   };
 
   // Replace the useEffect for auth state changes with a real-time Firestore listener
   useEffect(() => {
     let unsubscribeUserDoc: (() => void) | null = null;
+    
     const unsubscribeAuth = authService.subscribeToAuthChanges(async (firebaseUser: FirebaseUser | null) => {
       if (firebaseUser) {
-        // Listen to changes on the user's Firestore document
-        const userRef = doc(db, 'users', firebaseUser.uid);
-        unsubscribeUserDoc = onSnapshot(userRef, (userDoc) => {
-          if (userDoc.exists()) {
-            const userData = userDoc.data();
+        try {
+          // Listen to changes on the user's Firestore document
+          const userRef = doc(db, 'users', firebaseUser.uid);
+          unsubscribeUserDoc = onSnapshot(userRef, (userDoc) => {
+            if (userDoc.exists()) {
+              const userData = userDoc.data();
+              setCurrentUser({
+                uid: firebaseUser.uid,
+                email: firebaseUser.email || '',
+                displayName: firebaseUser.displayName || userData.name || 'User',
+                role: userData.role || 'user',
+                verified: userData.verified || false,
+                answered: userData.answered || false,
+                createdAt: userData.createdAt,
+                name: userData.name
+              });
+            } else {
+              // User document doesn't exist, create it
+              console.log('User document not found, creating new one for:', firebaseUser.uid);
+              getUserData(firebaseUser);
+            }
+            setLoading(false);
+          }, (error) => {
+            console.error('Error listening to user document:', error);
+            // Fallback to basic user data if Firestore fails
             setCurrentUser({
               uid: firebaseUser.uid,
               email: firebaseUser.email || '',
-              displayName: firebaseUser.displayName || userData.name || 'User',
-              role: userData.role || 'user',
-              verified: userData.verified || false,
-              answered: userData.answered || false,
-              createdAt: userData.createdAt,
-              name: userData.name
+              displayName: firebaseUser.displayName || 'User',
+              role: 'user',
+              verified: false,
+              answered: false
             });
-          } else {
-            setCurrentUser(null);
-          }
+            setLoading(false);
+          });
+        } catch (error) {
+          console.error('Error setting up user document listener:', error);
+          // Fallback to basic user data
+          setCurrentUser({
+            uid: firebaseUser.uid,
+            email: firebaseUser.email || '',
+            displayName: firebaseUser.displayName || 'User',
+            role: 'user',
+            verified: false,
+            answered: false
+          });
           setLoading(false);
-        });
+        }
       } else {
         setCurrentUser(null);
         setLoading(false);
@@ -139,6 +269,20 @@ export function AuthProvider({ children }: AuthProviderProps) {
       if (unsubscribeUserDoc) unsubscribeUserDoc();
     };
   }, []);
+
+  // Initialize One Tap when component mounts (if user is not signed in)
+  useEffect(() => {
+    const initOneTapOnMount = async () => {
+      if (!currentUser && !loading && !oneTapInitialized && !initializationAttempted && !initializationInProgress) {
+        // Small delay to ensure page is fully loaded
+        setTimeout(() => {
+          initializeOneTap();
+        }, 2000);
+      }
+    };
+
+    initOneTapOnMount();
+  }, [currentUser, loading, oneTapInitialized, initializationAttempted, initializationInProgress]);
 
   // Register with email and password
   const registerWithEmail = async (email: string, password: string): Promise<FirebaseUser> => {
@@ -158,6 +302,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const loginWithEmail = async (email: string, password: string): Promise<FirebaseUser> => {
     setLoading(true);
     setError(null);
+    
+    // Cancel any ongoing One Tap prompts
+    cancelOneTap();
+    
     try {
       const userCredential = await authService.loginWithEmail(email, password);
       return userCredential.user;
@@ -168,10 +316,35 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   };
 
-  // Google sign-in (updated)
+  // Progressive Google sign-in (try One Tap first, fallback to button)
+  const loginWithGoogleProgressive = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await signInWithGoogleProgressive(handleGoogleCredentialResponse);
+      
+      if (result === false) {
+        // Need to show manual sign-in button
+        setLoading(false);
+        return false;
+      }
+      
+      return result;
+    } catch (err: any) {
+      setError(err.message);
+      setLoading(false);
+      throw err;
+    }
+  };
+
+  // Traditional Google sign-in (fallback method)
   const loginWithGoogle = async () => {
     setLoading(true);
     setError(null);
+    
+    // Cancel any ongoing One Tap prompts
+    cancelOneTap();
+    
     try {
       const result = await signInWithGoogle();
       await getUserData(result.user);
@@ -188,6 +361,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const signOut = async (): Promise<void> => {
     setError(null);
     try {
+      // Reset auth state and disable auto-select
+      resetUserCache();
+      
       await authService.logOut();
     } catch (err: any) {
       handleError(err);
@@ -230,6 +406,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   };
 
+  // Modern reset user cache (resets all auth state)
+  const resetUserCache = () => {
+    authService.resetUserCache();
+  };
+
   const value: AuthContextType = {
     currentUser,
     user: currentUser,
@@ -238,13 +419,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
     registerWithEmail,
     loginWithEmail,
     loginWithGoogle,
+    signInWithGoogle: loginWithGoogle, // Alias for compatibility
+    signInWithGoogleProgressive: loginWithGoogleProgressive,
     signOut,
     updateUserEmail,
     updateUserPassword,
     resetPassword,
     resetUserCache,
-    // Aliases for compatibility
-    signInWithGoogle: loginWithGoogle,
+    initializeOneTap,
+    cancelOneTap
   };
 
   return (
