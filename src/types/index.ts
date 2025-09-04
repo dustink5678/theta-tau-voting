@@ -6,7 +6,7 @@ export interface User {
   photoURL?: string;
   verified: boolean;
   answered: boolean;
-  role: 'admin' | 'user';
+  role: 'admin' | 'regent' | 'user';
 }
 
 export interface Question {
@@ -24,3 +24,18 @@ export interface AuthContextType {
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
 } 
+
+export interface TimerState {
+  phase: 'main' | 'rotation';
+  mainDurationMs: number;
+  rotationDurationMs: number;
+  isRunning: boolean;
+  isPaused: boolean;
+  endAt: number | null;
+  lastUpdatedBy?: {
+    uid: string;
+    email?: string;
+    role?: 'admin' | 'regent' | 'user';
+  };
+  lastUpdatedAt?: any; // Firestore server timestamp
+}

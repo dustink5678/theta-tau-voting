@@ -5,13 +5,13 @@ import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
 import { getAnalytics, isSupported } from 'firebase/analytics';
 
 const firebaseConfig = {
-  apiKey: process.env.REACT_APP_FIREBASE_API_KEY || import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN || import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID || import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET || import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID || import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.REACT_APP_FIREBASE_APP_ID || import.meta.env.VITE_FIREBASE_APP_ID,
-  measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID || import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
+  apiKey: "AIzaSyAwywLsoOLlC5Sw7d94-hfOiVSHJ9y-uE4",
+  authDomain: "thetatauzetadeltavoting.firebaseapp.com",
+  projectId: "thetatauzetadeltavoting",
+  storageBucket: "thetatauzetadeltavoting.firebasestorage.app",
+  messagingSenderId: "1066578439936",
+  appId: "1:1066578439936:web:7fd9d52aed4f7e7ed50de5",
+  measurementId: "G-Z5VBGV9QBZ"
 };
 
 // Initialize Firebase with error handling

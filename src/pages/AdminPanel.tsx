@@ -42,6 +42,11 @@ import {
   HStack,
   Center,
   Spinner,
+  Select,
+  Menu,
+  MenuButton,
+  MenuList,
+  MenuItem,
 } from '@chakra-ui/react';
 import {
   getDocs,
@@ -88,6 +93,37 @@ const AdminPanel = () => {
   } = useDisclosure();
   const cancelRef = useRef(null);
   const toast = useToast();
+
+  const handleChangeUserRole = async (userId: string, newRole: 'admin' | 'regent' | 'user') => {
+    try {
+      const userRef = doc(db, 'users', userId);
+      const userDoc = await getDoc(userRef);
+
+      if (!userDoc.exists()) {
+        toast({
+          title: 'User not found',
+          description: 'The user may have been deleted.',
+          status: 'error',
+          duration: 3000,
+        });
+        return;
+      }
+
+      await updateDoc(userRef, { role: newRole });
+      toast({
+        title: `User role updated to ${newRole}`,
+        status: 'success',
+        duration: 3000,
+      });
+    } catch (error) {
+      console.error('Error updating user role:', error);
+      toast({
+        title: 'Error updating user role',
+        status: 'error',
+        duration: 3000,
+      });
+    }
+  };
 
   const handleVerifyUser = async (userId: string, verified: boolean) => {
     try {
@@ -353,8 +389,8 @@ const AdminPanel = () => {
     try {
       const batch = writeBatch(db);
       
-      // Filter out admin users
-      const nonAdminUsers = users.filter(user => user.role !== 'admin');
+      // Filter out admin and regent users
+      const nonAdminUsers = users.filter(user => user.role !== 'admin' && user.role !== 'regent');
       
       for (const user of nonAdminUsers) {
         const userRef = doc(db, 'users', user.uid);
@@ -364,14 +400,14 @@ const AdminPanel = () => {
       await batch.commit();
       
       toast({
-        title: 'All non-admin users deleted successfully',
+        title: 'All non-admin/regent users deleted successfully',
         status: 'success',
         duration: 3000,
       });
     } catch (error) {
-      console.error('Error deleting all non-admin users:', error);
+      console.error('Error deleting all non-admin/regent users:', error);
       toast({
-        title: 'Error deleting all non-admin users',
+        title: 'Error deleting all non-admin/regent users',
         status: 'error',
         duration: 3000,
       });
@@ -434,7 +470,7 @@ const AdminPanel = () => {
                         onClick={handleDeleteAllUsers}
                         isLoading={deleteAllUsersLoading}
                       >
-                        Delete All Users Except Admin
+                        Delete All Users Except Admin/Regent
                       </Button>
                     </Flex>
                     <Box maxH="500px" overflowY="auto" w="100%">
@@ -444,6 +480,7 @@ const AdminPanel = () => {
                             <Th>Name</Th>
                             <Th>Email</Th>
                             <Th>Status</Th>
+                            <Th>Role</Th>
                             <Th>Voted</Th>
                             <Th>Actions</Th>
                           </Tr>
@@ -459,6 +496,24 @@ const AdminPanel = () => {
                                 </Badge>
                               </Td>
                               <Td>
+                                <Menu>
+                                  <MenuButton as={Button} size="sm" variant="outline">
+                                    {user.role || 'user'}
+                                  </MenuButton>
+                                  <MenuList>
+                                    <MenuItem onClick={() => handleChangeUserRole(user.uid, 'user')}>
+                                      User
+                                    </MenuItem>
+                                    <MenuItem onClick={() => handleChangeUserRole(user.uid, 'regent')}>
+                                      Regent
+                                    </MenuItem>
+                                    <MenuItem onClick={() => handleChangeUserRole(user.uid, 'admin')}>
+                                      Admin
+                                    </MenuItem>
+                                  </MenuList>
+                                </Menu>
+                              </Td>
+                              <Td>
                                 <Badge colorScheme={user.answered ? 'green' : 'yellow'}>
                                   {user.answered ? 'Voted' : 'Not Voted'}
                                 </Badge>
@@ -466,14 +521,14 @@ const AdminPanel = () => {
                               <Td>
                                 <Flex gap={2}>
                                   {user.verified ? (
-                                    user.role === 'admin' ? (
-                                      <Tooltip label="Admin users cannot be unverified" hasArrow>
+                                    (user.role === 'admin' || user.role === 'regent') ? (
+                                      <Tooltip label={`${user.role.charAt(0).toUpperCase() + user.role.slice(1)} users cannot be unverified`} hasArrow>
                                         <Button
                                           size="sm"
                                           colorScheme="gray"
                                           isDisabled={true}
                                         >
-                                          Admin
+                                          {user.role}
                                         </Button>
                                       </Tooltip>
                                     ) : (
@@ -798,11 +853,11 @@ const AdminPanel = () => {
         <AlertDialogOverlay>
           <AlertDialogContent>
             <AlertDialogHeader fontSize="lg" fontWeight="bold">
-              Delete All Non-Admin Users
+              Delete All Non-Admin/Regent Users
             </AlertDialogHeader>
 
             <AlertDialogBody>
-              Are you sure you want to delete all non-admin users? This action cannot be undone.
+              Are you sure you want to delete all non-admin/regent users? This action cannot be undone.
             </AlertDialogBody>
 
             <AlertDialogFooter>

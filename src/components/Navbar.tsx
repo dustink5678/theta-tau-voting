@@ -68,7 +68,7 @@ const Navbar = () => {
             </MenuButton>
             <MenuList color="black">
               <MenuItem fontWeight="bold">
-                {user.role === 'admin' ? 'Administrator' : 'Member'}
+                {user.role === 'admin' ? 'Administrator' : user.role === 'regent' ? 'Regent' : 'Member'}
               </MenuItem>
               <MenuDivider />
               <MenuItem onClick={signOut}>Sign Out</MenuItem>
@@ -77,8 +77,8 @@ const Navbar = () => {
         )}
       </Flex>
 
-      {/* Navigation Tabs for Admin Users */}
-      {user && user.role === 'admin' && (
+      {/* Navigation Tabs for Admin and Regent Users */}
+      {user && (user.role === 'admin' || user.role === 'regent') && (
         <Tabs 
           index={tabIndex} 
           onChange={handleTabChange} 

@@ -5,6 +5,7 @@ import { useAuth } from './contexts/AuthContext';
 import { DataProvider } from './contexts/DataContext';
 import Login from './pages/Login';
 import AdminPanel from './pages/AdminPanel'
+import RegentControl from './pages/RegentControl'
 import UserDashboard from './pages/UserDashboard';
 import PendingVoters from './pages/PendingVoters';
 import LoadingScreen from './components/LoadingScreen';
@@ -40,7 +41,7 @@ const theme = extendTheme({
   },
 });
 
-const PrivateRoute = ({ children, adminOnly = false }: { children: React.ReactNode; adminOnly?: boolean }) => {
+const PrivateRoute = ({ children, adminOnly = false, controllerOnly = false }: { children: React.ReactNode; adminOnly?: boolean; controllerOnly?: boolean }) => {
   const { user, loading } = useAuth() as any;
   
   if (loading) {
@@ -55,8 +56,15 @@ const PrivateRoute = ({ children, adminOnly = false }: { children: React.ReactNo
     return <Navigate to="/dashboard" replace />;
   }
 
+  if (controllerOnly) {
+    const isController = user.role === 'admin' || user.role === 'regent';
+    if (!isController) {
+      return <Navigate to="/dashboard" replace />;
+    }
+  }
+
   // Calculate content height based on whether user is admin (with tabs) or not
-  const contentMinHeight = user.role === 'admin' ? 'calc(100vh - 98px)' : 'calc(100vh - 56px)';
+  const contentMinHeight = (user.role === 'admin' || user.role === 'regent') ? 'calc(100vh - 98px)' : 'calc(100vh - 56px)';
 
   return (
     <Flex direction="column" width="100vw" minH="100vh">
@@ -75,12 +83,12 @@ const PublicRoute = ({ children }: { children: React.ReactNode }) => {
     return <LoadingScreen />;
   }
   
-  // If user is authenticated, redirect them immediately
-  if (user) {
-    return user.role === 'admin' 
-      ? <Navigate to="/admin" replace /> 
-      : <Navigate to="/dashboard" replace />;
-  }
+      // If user is authenticated, redirect them immediately
+    if (user) {
+      return (user.role === 'admin' || user.role === 'regent')
+        ? <Navigate to="/admin" replace />
+        : <Navigate to="/dashboard" replace />;
+    }
   
   return (
     <Box width="100vw" minH="100vh">
@@ -130,11 +138,19 @@ const AppContent = () => {
             </PublicRoute>
           }
         />
+        <Route
+          path="/regent"
+          element={
+            <PrivateRoute controllerOnly>
+              <RegentControl />
+            </PrivateRoute>
+          }
+        />
         <Route path="/" element={
           loading ? (
             <LoadingScreen />
-          ) : user?.role === 'admin' ? (
-            <Navigate to="/admin" replace /> 
+          ) : (user?.role === 'admin' || user?.role === 'regent') ? (
+            <Navigate to="/admin" replace />
           ) : (
             <Navigate to="/dashboard" replace />
           )

@@ -32,7 +32,7 @@ const Login = () => {
   useEffect(() => {
     if (user) {
       // @ts-ignore
-      if (user.role === 'admin') {
+      if (user.role === 'admin' || user.role === 'regent') {
         navigate('/admin');
       // @ts-ignore
       } else if (user.verified) {
