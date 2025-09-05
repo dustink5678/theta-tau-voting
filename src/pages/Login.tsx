@@ -32,11 +32,14 @@ const Login = () => {
   useEffect(() => {
     if (user) {
       // @ts-ignore
-      if (user.role === 'admin' || user.role === 'regent') {
+      if (user.role === 'admin') {
         navigate('/admin');
       // @ts-ignore
+      } else if (user.role === 'regent') {
+        navigate('/set-timer');
+      // @ts-ignore
       } else if (user.verified) {
-        navigate('/dashboard');
+        navigate('/timer');
       } else {
         toast({
           title: 'Account pending verification',

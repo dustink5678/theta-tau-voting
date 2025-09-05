@@ -5,7 +5,8 @@ import { useAuth } from './contexts/AuthContext';
 import { DataProvider } from './contexts/DataContext';
 import Login from './pages/Login';
 import AdminPanel from './pages/AdminPanel'
-import RegentControl from './pages/RegentControl'
+import TimerControl from './pages/TimerControl'
+import TimerView from './pages/TimerView'
 import UserDashboard from './pages/UserDashboard';
 import PendingVoters from './pages/PendingVoters';
 import LoadingScreen from './components/LoadingScreen';
@@ -53,13 +54,13 @@ const PrivateRoute = ({ children, adminOnly = false, controllerOnly = false }: {
   }
 
   if (adminOnly && user.role !== 'admin') {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to="/timer" replace />;
   }
 
   if (controllerOnly) {
     const isController = user.role === 'admin' || user.role === 'regent';
     if (!isController) {
-      return <Navigate to="/dashboard" replace />;
+      return <Navigate to="/timer" replace />;
     }
   }
 
@@ -78,18 +79,22 @@ const PrivateRoute = ({ children, adminOnly = false, controllerOnly = false }: {
 
 const PublicRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth() as any;
-  
+
   if (loading) {
     return <LoadingScreen />;
   }
-  
+
       // If user is authenticated, redirect them immediately
     if (user) {
-      return (user.role === 'admin' || user.role === 'regent')
-        ? <Navigate to="/admin" replace />
-        : <Navigate to="/dashboard" replace />;
+      if (user.role === 'admin') {
+        return <Navigate to="/admin" replace />;
+      } else if (user.role === 'regent') {
+        return <Navigate to="/set-timer" replace />;
+      } else {
+        return <Navigate to="/timer" replace />;
+      }
     }
-  
+
   return (
     <Box width="100vw" minH="100vh">
       {children}
@@ -139,20 +144,30 @@ const AppContent = () => {
           }
         />
         <Route
-          path="/regent"
+          path="/timer"
+          element={
+            <PrivateRoute>
+              <TimerView />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/set-timer"
           element={
             <PrivateRoute controllerOnly>
-              <RegentControl />
+              <TimerControl />
             </PrivateRoute>
           }
         />
         <Route path="/" element={
           loading ? (
             <LoadingScreen />
-          ) : (user?.role === 'admin' || user?.role === 'regent') ? (
+          ) : user?.role === 'admin' ? (
             <Navigate to="/admin" replace />
+          ) : user?.role === 'regent' ? (
+            <Navigate to="/set-timer" replace />
           ) : (
-            <Navigate to="/dashboard" replace />
+            <Navigate to="/timer" replace />
           )
         } />
       </Routes>

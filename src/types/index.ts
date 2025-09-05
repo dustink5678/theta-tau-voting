@@ -38,4 +38,5 @@ export interface TimerState {
     role?: 'admin' | 'regent' | 'user';
   };
   lastUpdatedAt?: any; // Firestore server timestamp
+  _remainingMs?: number;
 }

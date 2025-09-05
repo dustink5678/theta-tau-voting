@@ -17,7 +17,7 @@ const parseToMs = (m: string, s: string) => {
   return (mi * 60 + si) * 1000;
 };
 
-const RegentControl = () => {
+const TimerControl = () => {
   const { user } = useAuth() as any as { user: User };
   const toast = useToast();
   const [timer, setTimer] = useState<TimerState | null>(null);
@@ -124,7 +124,7 @@ const RegentControl = () => {
   return (
     <Box width="100vw" minH="100vh" bg="gray.50" display="flex" alignItems="center" justifyContent="center" py={8}>
       <Box bg="white" p={8} borderRadius="md" boxShadow="md" width="100%" maxW="720px">
-        <Heading size="lg" mb={4}>Regent Control</Heading>
+        <Heading size="lg" mb={4}>Set Timer</Heading>
         <Stack spacing={6}>
           <Box>
             <Text fontWeight="bold" mb={2}>Durations</Text>
@@ -163,6 +163,4 @@ const RegentControl = () => {
   );
 };
 
-export default RegentControl;
-
-
+export default TimerControl;

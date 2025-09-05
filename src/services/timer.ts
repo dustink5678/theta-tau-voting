@@ -22,6 +22,7 @@ export const subscribeToTimer = (onChange: (state: TimerState | null) => void) =
       endAt: data.endAt ?? null,
       lastUpdatedBy: data.lastUpdatedBy,
       lastUpdatedAt: data.lastUpdatedAt,
+      _remainingMs: data._remainingMs,
     };
     onChange(state);
   });
